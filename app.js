@@ -142,7 +142,8 @@ function defaultState() {
       expandedHistoryIds: [],
       historyViewMode: 'sessions',
       historyExerciseFilter: '',
-      importPanelOpen: false
+      importPanelOpen: false,
+      templatesPanelOpen: false
     }
   };
 }
@@ -457,21 +458,27 @@ function renderRoutineTab() {
 }
 
 function renderTemplatesPanel() {
+  const open = state.ui.templatesPanelOpen;
   return `
     <div class="card">
-      <h3>Start from a template</h3>
-      <p class="muted">Adds that program's sessions to your routine — nothing existing is deleted.</p>
-      ${ROUTINE_TEMPLATES.map(t => `
-        <div class="exercise-row">
-          <div class="row between">
-            <div>
-              <h3 style="font-size:0.95rem;">${escapeHtml(t.label)}</h3>
-              <p class="muted">${escapeHtml(t.description)}</p>
+      <div class="row between" data-action="toggle-templates-panel" style="cursor:pointer;">
+        <h3>Start from a template</h3>
+        <span class="icon-btn">${open ? '▾' : '▸'}</span>
+      </div>
+      ${open ? `
+        <p class="muted">Adds that program's sessions to your routine — nothing existing is deleted.</p>
+        ${ROUTINE_TEMPLATES.map(t => `
+          <div class="exercise-row">
+            <div class="row between">
+              <div>
+                <h3 style="font-size:0.95rem;">${escapeHtml(t.label)}</h3>
+                <p class="muted">${escapeHtml(t.description)}</p>
+              </div>
+              <button class="btn small" data-action="use-template" data-template="${t.key}">Use</button>
             </div>
-            <button class="btn small" data-action="use-template" data-template="${t.key}">Use</button>
           </div>
-        </div>
-      `).join('')}
+        `).join('')}
+      ` : ''}
     </div>
   `;
 }
@@ -948,6 +955,11 @@ document.addEventListener('click', (e) => {
       break;
     case 'clear-all-data':
       clearAllData();
+      break;
+    case 'toggle-templates-panel':
+      state.ui.templatesPanelOpen = !state.ui.templatesPanelOpen;
+      saveState();
+      render();
       break;
     case 'toggle-import-panel':
       state.ui.importPanelOpen = !state.ui.importPanelOpen;
