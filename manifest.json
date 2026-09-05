@@ -1,6 +1,6 @@
 {
-  "name": "Gym Companion",
-  "short_name": "GymCo",
+  "name": "HeavyHo",
+  "short_name": "HeavyHo",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

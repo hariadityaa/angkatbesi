@@ -1,11 +1,32 @@
-/* Gym Companion — all data stored in this browser via localStorage. No server. */
+/* HeavyHo — all data stored in this browser via localStorage. No server. */
 
 const STORAGE_KEY = 'gymCompanionData_v1';
+
+const SAMPLE_ROUTINE = {
+  name: 'Sample Routine',
+  sessions: [
+    {
+      name: 'Day 1: Push',
+      exercises: [
+        { name: 'Incline Dumbbell Bench Press', sets: 3, reps: '8-12', notes: 'Optional: any setup cue or focus reminder goes here.' },
+        { name: 'Dumbbell Lateral Raises', sets: 3, reps: 12 }
+      ]
+    },
+    {
+      name: 'Day 2: Pull',
+      exercises: [
+        { name: 'Machine Lat Pulldown', sets: 3, reps: '8-12' },
+        { name: 'Romanian Deadlifts', sets: 3, reps: '8-10', notes: 'Soft knees, push hips straight back.' }
+      ]
+    }
+  ]
+};
 
 function defaultState() {
   return {
     version: 1,
     unit: 'kg',
+    restSeconds: 90,
     routine: {
       name: 'My Routine',
       sessions: []
@@ -17,7 +38,8 @@ function defaultState() {
       expandedSessionIds: [],
       expandedHistoryIds: [],
       historyViewMode: 'sessions',
-      historyExerciseFilter: ''
+      historyExerciseFilter: '',
+      importPanelOpen: false
     }
   };
 }
@@ -49,6 +71,10 @@ let state = loadState();
 // If there's an in-progress workout, always land on the Train tab so it's not missed.
 if (state.activeWorkoutDraft) state.ui.activeTab = 'train';
 
+// Rest timer lives outside persisted state — it doesn't need to survive a reload.
+let restState = { running: false, remaining: 0, duration: Number(state.restSeconds) || 90 };
+let restIntervalHandle = null;
+
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -66,8 +92,21 @@ function formatDate(iso) {
     ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
+function formatMMSS(totalSeconds) {
+  const t = Math.max(0, Math.round(totalSeconds));
+  const m = Math.floor(t / 60);
+  const s = t % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function unitLabel() {
   return escapeHtml(state.unit || 'kg');
+}
+
+// First number found in a reps value like "8-12" or "10" — used to pre-fill a set's rep input.
+function parseRepsLow(targetReps) {
+  const m = String(targetReps == null ? '' : targetReps).match(/\d+/);
+  return m ? m[0] : '';
 }
 
 // Find the most recent logged sets for an exercise (by id, falling back to name)
@@ -98,6 +137,112 @@ function showToast(msg) {
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 2200);
+}
+
+function downloadJson(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ---------- Rest timer ----------
+
+function beep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  } catch (e) { /* audio not available, ignore */ }
+}
+
+function clearRestInterval() {
+  if (restIntervalHandle) {
+    clearInterval(restIntervalHandle);
+    restIntervalHandle = null;
+  }
+}
+
+function startRestTimer() {
+  clearRestInterval();
+  const duration = Number(state.restSeconds) || 90;
+  restState = { running: true, remaining: duration, duration };
+  restIntervalHandle = setInterval(() => {
+    restState.remaining -= 1;
+    if (restState.remaining <= 0) {
+      clearRestInterval();
+      restState.running = false;
+      restState.remaining = 0;
+      beep();
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      updateRestBannerDom();
+      showToast('Rest done — next set!');
+      setTimeout(() => { if (!restState.running) render(); }, 400);
+      return;
+    }
+    updateRestBannerDom();
+  }, 1000);
+}
+
+function adjustRestTimer(deltaSeconds) {
+  if (!restState.running) return;
+  restState.remaining = Math.max(0, restState.remaining + deltaSeconds);
+  restState.duration = Math.max(restState.duration, restState.remaining);
+  updateRestBannerDom();
+}
+
+function skipRestTimer() {
+  clearRestInterval();
+  restState.running = false;
+  restState.remaining = 0;
+  render();
+}
+
+function stopRestTimerSilently() {
+  clearRestInterval();
+  restState = { running: false, remaining: 0, duration: Number(state.restSeconds) || 90 };
+}
+
+function updateRestBannerDom() {
+  const remEl = document.getElementById('rest-remaining');
+  const barEl = document.getElementById('rest-progress-bar');
+  if (!remEl || !barEl) return;
+  remEl.textContent = formatMMSS(restState.remaining);
+  const pct = restState.duration ? Math.max(0, Math.min(100, (restState.remaining / restState.duration) * 100)) : 0;
+  barEl.style.width = pct + '%';
+}
+
+function renderRestBanner() {
+  if (!restState.running) return '';
+  const pct = restState.duration ? Math.max(0, Math.min(100, (restState.remaining / restState.duration) * 100)) : 0;
+  return `
+    <div class="rest-banner" id="rest-banner">
+      <div class="row between">
+        <span>Rest</span>
+        <span id="rest-remaining" class="rest-remaining-text">${formatMMSS(restState.remaining)}</span>
+      </div>
+      <div class="rest-progress-track"><div class="rest-progress-fill" id="rest-progress-bar" style="width:${pct}%"></div></div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn small" data-action="rest-sub15">−15s</button>
+        <button class="btn small" data-action="rest-add15">+15s</button>
+        <button class="btn small ghost" data-action="rest-skip">Skip rest</button>
+      </div>
+    </div>
+  `;
 }
 
 // ---------- Rendering ----------
@@ -154,13 +299,15 @@ function renderActiveWorkout(draft) {
       </div>
       <button class="btn ghost" data-action="cancel-workout">Cancel</button>
     </div>
+    ${renderRestBanner()}
     <div class="card">
       ${draft.exercises.map(ex => `
         <div class="exercise-row">
           <div class="row between">
             <h3>${escapeHtml(ex.name)}</h3>
-            <span class="pill">target ${ex.targetSets}x${ex.targetReps}</span>
+            <span class="pill">target ${ex.targetSets}x${escapeHtml(ex.targetReps)}</span>
           </div>
+          ${ex.notes ? `<p class="muted" style="margin:2px 0 8px;">${escapeHtml(ex.notes)}</p>` : ''}
           <div class="row muted" style="margin: 6px 0 8px;">
             <span style="width:28px;text-align:center;">#</span>
             <span class="grow">Reps</span>
@@ -201,6 +348,27 @@ function renderRoutineTab() {
     </div>
     ${r.sessions.map((s, sIdx) => renderSessionCard(s, sIdx, r.sessions.length)).join('')}
     <button class="btn primary block" data-action="add-session">+ Add Session</button>
+    ${renderImportPanel()}
+  `;
+}
+
+function renderImportPanel() {
+  const open = state.ui.importPanelOpen;
+  return `
+    <div class="card">
+      <div class="row between" data-action="toggle-import-panel" style="cursor:pointer;">
+        <h3>Import routine (paste JSON)</h3>
+        <span class="icon-btn">${open ? '▾' : '▸'}</span>
+      </div>
+      ${open ? `
+        <p class="muted">Paste a routine JSON below. It adds these sessions to your current routine — nothing existing is deleted.</p>
+        <textarea id="import-json-textarea" rows="9" placeholder='{"name":"My Program","sessions":[{"name":"Day 1","exercises":[{"name":"Bench Press","sets":3,"reps":"8-12","notes":"optional cue"}]}]}'></textarea>
+        <div class="row wrap" style="margin-top:8px;">
+          <button class="btn primary" data-action="import-routine-json">Import</button>
+          <button class="btn small" data-action="download-sample-routine">Download sample JSON</button>
+        </div>
+      ` : ''}
+    </div>
   `;
 }
 
@@ -224,13 +392,13 @@ function renderSessionCard(s, sIdx, total) {
             <div class="row wrap">
               <input type="text" class="grow" style="min-width:120px;" placeholder="Exercise name"
                 data-field="exercise-name" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.name)}">
-              <div style="width:60px;">
+              <div style="width:56px;">
                 <label class="field-label">Sets</label>
                 <input type="number" min="1" data-field="target-sets" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${ex.targetSets}">
               </div>
-              <div style="width:60px;">
+              <div style="width:72px;">
                 <label class="field-label">Reps</label>
-                <input type="number" min="1" data-field="target-reps" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${ex.targetReps}">
+                <input type="text" inputmode="numeric" placeholder="e.g. 8-12" data-field="target-reps" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.targetReps)}">
               </div>
               <div class="reorder-btns">
                 <button class="icon-btn" data-action="move-exercise-up" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === 0 ? 'disabled' : ''}>▲</button>
@@ -238,6 +406,8 @@ function renderSessionCard(s, sIdx, total) {
               </div>
               <button class="icon-btn" data-action="delete-exercise" data-session-id="${s.id}" data-exercise-id="${ex.id}">🗑</button>
             </div>
+            <input type="text" style="margin-top:6px;" placeholder="Notes (optional)"
+              data-field="exercise-notes" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.notes || '')}">
           </div>
         `).join('')}
         <button class="btn small" style="margin-top:10px;" data-action="add-exercise" data-session-id="${s.id}">+ Add Exercise</button>
@@ -323,6 +493,11 @@ function renderSettingsTab() {
       <p class="muted">Just a label shown next to weight fields (e.g. kg, lb) — changing it does not convert existing numbers.</p>
     </div>
     <div class="card">
+      <label class="field-label">Rest timer default (seconds)</label>
+      <input type="number" min="0" step="5" data-field="rest-seconds" value="${escapeHtml(state.restSeconds)}">
+      <p class="muted">Starts counting down automatically whenever you check off a set during a workout.</p>
+    </div>
+    <div class="card">
       <h3>Backup your data</h3>
       <p class="muted">Everything is stored only in this browser. Export a backup occasionally so you don't lose it if you clear browser data or switch phones.</p>
       <div class="row wrap" style="margin-top:8px;">
@@ -350,23 +525,24 @@ function handleStartSession(sessionId) {
     showToast('Add exercises to this session first.');
     return;
   }
+  stopRestTimerSilently();
   const draft = {
     sessionId: s.id,
     sessionName: s.name,
     startedAt: new Date().toISOString(),
     exercises: s.exercises.map(ex => {
       const prev = lastLoggedSets(ex.id, ex.name);
-      const numSets = ex.targetSets || 1;
+      const numSets = Number(ex.targetSets) || 1;
       const sets = [];
       for (let i = 0; i < numSets; i++) {
         const prevSet = prev && prev[i];
         sets.push({
-          reps: ex.targetReps != null ? String(ex.targetReps) : '',
+          reps: parseRepsLow(ex.targetReps),
           weight: prevSet && prevSet.weight != null ? String(prevSet.weight) : '',
           done: false
         });
       }
-      return { exerciseId: ex.id, name: ex.name, targetSets: ex.targetSets, targetReps: ex.targetReps, sets };
+      return { exerciseId: ex.id, name: ex.name, targetSets: ex.targetSets, targetReps: ex.targetReps, notes: ex.notes || '', sets };
     })
   };
   state.activeWorkoutDraft = draft;
@@ -377,6 +553,7 @@ function handleStartSession(sessionId) {
 function handleFinishWorkout() {
   const draft = state.activeWorkoutDraft;
   if (!draft) return;
+  stopRestTimerSilently();
   const entry = {
     id: uid(),
     sessionId: draft.sessionId,
@@ -401,22 +578,15 @@ function handleFinishWorkout() {
 
 function handleCancelWorkout() {
   if (!confirm('Discard this workout? Nothing will be saved.')) return;
+  stopRestTimerSilently();
   state.activeWorkoutDraft = null;
   saveState();
   render();
 }
 
 function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const stamp = new Date().toISOString().slice(0, 10);
-  a.href = url;
-  a.download = `gym-companion-backup-${stamp}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  downloadJson(`gym-companion-backup-${stamp}.json`, state);
 }
 
 function importDataFromFile(file) {
@@ -446,9 +616,48 @@ function importDataFromFile(file) {
   reader.readAsText(file);
 }
 
+function importRoutineFromJsonText(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    alert('That is not valid JSON.');
+    return false;
+  }
+  const routineData = parsed && parsed.routine && Array.isArray(parsed.routine.sessions)
+    ? parsed.routine
+    : parsed;
+  if (!routineData || !Array.isArray(routineData.sessions)) {
+    alert('JSON must have a "sessions" array (each with a "name" and "exercises").');
+    return false;
+  }
+  const newSessions = routineData.sessions.map(s => ({
+    id: uid(),
+    name: String(s.name || 'Untitled Session'),
+    exercises: Array.isArray(s.exercises) ? s.exercises.map(e => ({
+      id: uid(),
+      name: String(e.name || ''),
+      targetSets: Number(e.sets != null ? e.sets : e.targetSets) || 3,
+      targetReps: String(e.reps != null ? e.reps : (e.targetReps != null ? e.targetReps : '10')),
+      notes: e.notes ? String(e.notes) : ''
+    })) : []
+  }));
+  if (newSessions.length === 0) {
+    alert('No sessions found in that JSON.');
+    return false;
+  }
+  if (!confirm(`Import ${newSessions.length} session(s) into your routine? Existing sessions are kept.`)) return false;
+  const wasEmpty = state.routine.sessions.length === 0;
+  state.routine.sessions.push(...newSessions);
+  if (wasEmpty && routineData.name) state.routine.name = String(routineData.name);
+  saveState();
+  return true;
+}
+
 function clearAllData() {
   if (!confirm('Erase ALL routines and history from this browser? This cannot be undone.')) return;
   if (!confirm('Really sure? This is permanent.')) return;
+  stopRestTimerSilently();
   state = defaultState();
   saveState();
   render();
@@ -485,14 +694,16 @@ document.addEventListener('click', (e) => {
     case 'toggle-set-done': {
       const ex = state.activeWorkoutDraft.exercises.find(x => x.exerciseId === exerciseId);
       ex.sets[setIndex].done = !ex.sets[setIndex].done;
+      const nowDone = ex.sets[setIndex].done;
       saveState();
+      if (nowDone) startRestTimer();
       render();
       break;
     }
     case 'add-set': {
       const ex = state.activeWorkoutDraft.exercises.find(x => x.exerciseId === exerciseId);
       const last = ex.sets[ex.sets.length - 1];
-      ex.sets.push({ reps: last ? last.reps : String(ex.targetReps || ''), weight: last ? last.weight : '', done: false });
+      ex.sets.push({ reps: last ? last.reps : parseRepsLow(ex.targetReps), weight: last ? last.weight : '', done: false });
       saveState();
       render();
       break;
@@ -504,6 +715,15 @@ document.addEventListener('click', (e) => {
       render();
       break;
     }
+    case 'rest-add15':
+      adjustRestTimer(15);
+      break;
+    case 'rest-sub15':
+      adjustRestTimer(-15);
+      break;
+    case 'rest-skip':
+      skipRestTimer();
+      break;
     case 'add-session': {
       const s = { id: uid(), name: `Session ${state.routine.sessions.length + 1}`, exercises: [] };
       state.routine.sessions.push(s);
@@ -540,7 +760,7 @@ document.addEventListener('click', (e) => {
     }
     case 'add-exercise': {
       const s = findSession(sessionId);
-      s.exercises.push({ id: uid(), name: '', targetSets: 3, targetReps: 10 });
+      s.exercises.push({ id: uid(), name: '', targetSets: 3, targetReps: '10', notes: '' });
       saveState();
       render();
       break;
@@ -595,6 +815,23 @@ document.addEventListener('click', (e) => {
     case 'clear-all-data':
       clearAllData();
       break;
+    case 'toggle-import-panel':
+      state.ui.importPanelOpen = !state.ui.importPanelOpen;
+      saveState();
+      render();
+      break;
+    case 'import-routine-json': {
+      const text = document.getElementById('import-json-textarea').value;
+      if (importRoutineFromJsonText(text)) {
+        state.ui.importPanelOpen = false;
+        render();
+        showToast('Routine imported.');
+      }
+      break;
+    }
+    case 'download-sample-routine':
+      downloadJson('gym-companion-sample-routine.json', SAMPLE_ROUTINE);
+      break;
   }
 });
 
@@ -623,6 +860,13 @@ document.addEventListener('input', (e) => {
       saveState();
       break;
     }
+    case 'exercise-notes': {
+      const s = findSession(sessionId);
+      const ex = s.exercises.find(x => x.id === exerciseId);
+      ex.notes = e.target.value;
+      saveState();
+      break;
+    }
     case 'target-sets': {
       const s = findSession(sessionId);
       const ex = s.exercises.find(x => x.id === exerciseId);
@@ -633,7 +877,7 @@ document.addEventListener('input', (e) => {
     case 'target-reps': {
       const s = findSession(sessionId);
       const ex = s.exercises.find(x => x.id === exerciseId);
-      ex.targetReps = e.target.value === '' ? '' : Number(e.target.value);
+      ex.targetReps = e.target.value;
       saveState();
       break;
     }
@@ -653,6 +897,10 @@ document.addEventListener('input', (e) => {
       state.unit = e.target.value;
       saveState();
       break;
+    case 'rest-seconds':
+      state.restSeconds = e.target.value === '' ? '' : Number(e.target.value);
+      saveState();
+      break;
   }
 });
 
@@ -670,8 +918,8 @@ document.addEventListener('change', (e) => {
     return;
   }
   const field = e.target.dataset.field;
-  if (field === 'target-sets' || field === 'target-reps' || field === 'unit' ||
-      field === 'session-name' || field === 'exercise-name' || field === 'routine-name') {
+  if (field === 'target-sets' || field === 'target-reps' || field === 'unit' || field === 'rest-seconds' ||
+      field === 'session-name' || field === 'exercise-name' || field === 'routine-name' || field === 'exercise-notes') {
     render();
   }
 });
