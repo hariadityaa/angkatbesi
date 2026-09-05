@@ -1,5 +1,10 @@
-const CACHE_NAME = 'gym-companion-v2';
-const ASSETS = [
+const CACHE_NAME = 'gym-companion-v3';
+
+// The app shell — always fetched from the network first so updates show up
+// immediately when online. The cache is only the offline fallback.
+const CORE_FILES = new Set(['', 'index.html', 'app.js', 'app.css', 'manifest.json']);
+
+const ALL_ASSETS = [
   './',
   './index.html',
   './app.css',
@@ -12,7 +17,7 @@ const ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ALL_ASSETS)).then(() => self.skipWaiting())
   );
 });
 
@@ -26,16 +31,32 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok && response.type === 'basic') {
+
+  const url = new URL(event.request.url);
+  const filename = url.pathname.split('/').pop();
+  const isCore = event.request.mode === 'navigate' || CORE_FILES.has(filename);
+
+  if (isCore) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
-      }).catch(() => cached);
-    })
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Static assets (icons) rarely change — cache-first is fine for these.
+  event.respondWith(
+    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+      if (response.ok && response.type === 'basic') {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      }
+      return response;
+    }))
   );
 });

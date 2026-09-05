@@ -1098,6 +1098,17 @@ document.addEventListener('change', (e) => {
 render();
 
 if ('serviceWorker' in navigator) {
+  // Once a newer service worker takes control, reload so the update is visible
+  // right away instead of leaving the tab on stale cached content.
+  let hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return; }
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   });
