@@ -22,6 +22,109 @@ const SAMPLE_ROUTINE = {
   ]
 };
 
+const ROUTINE_TEMPLATES = [
+  {
+    key: 'stronglifts-5x5',
+    label: 'StrongLifts 5×5',
+    description: 'Beginner barbell strength program — 2 alternating full-body workouts, 3x/week.',
+    data: {
+      name: 'StrongLifts 5x5',
+      sessions: [
+        {
+          name: 'Workout A',
+          exercises: [
+            { name: 'Squat', sets: 5, reps: 5, notes: 'Add 2.5kg (5lb) each workout while form holds up.' },
+            { name: 'Bench Press', sets: 5, reps: 5, notes: 'Add 2.5kg (5lb) each workout while form holds up.' },
+            { name: 'Barbell Row', sets: 5, reps: 5, notes: 'Add 2.5kg (5lb) each workout while form holds up.' }
+          ]
+        },
+        {
+          name: 'Workout B',
+          exercises: [
+            { name: 'Squat', sets: 5, reps: 5, notes: 'Same bar-weight progression as Workout A.' },
+            { name: 'Overhead Press', sets: 5, reps: 5, notes: 'Add 2.5kg (5lb) each workout while form holds up.' },
+            { name: 'Deadlift', sets: 1, reps: 5, notes: 'Just one top set — add 5kg (10lb) each workout.' }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    key: 'texas-method',
+    label: 'Texas Method',
+    description: 'Intermediate barbell program — volume, recovery and intensity days across the week.',
+    data: {
+      name: 'Texas Method',
+      sessions: [
+        {
+          name: 'Volume Day (Mon)',
+          exercises: [
+            { name: 'Squat', sets: 5, reps: 5, notes: "Heaviest weekly squat volume — moderate-heavy across all 5 sets." },
+            { name: 'Bench Press / Overhead Press', sets: 5, reps: 5, notes: 'Alternate emphasis weekly with the other press.' },
+            { name: 'Chin-Ups or Back Extension', sets: 3, reps: '8-10' }
+          ]
+        },
+        {
+          name: 'Recovery Day (Wed)',
+          exercises: [
+            { name: 'Squat (light)', sets: 2, reps: 5, notes: "About 80-90% of Monday's top weight — focus on speed and form." },
+            { name: 'Overhead Press / Bench Press', sets: 3, reps: 5, notes: "Whichever press you didn't emphasize Monday." },
+            { name: 'Chin-Ups or Back Extension', sets: 3, reps: '8-10' }
+          ]
+        },
+        {
+          name: 'Intensity Day (Fri)',
+          exercises: [
+            { name: 'Squat', sets: 1, reps: 5, notes: "Heaviest set of the week — beat last Friday's weight." },
+            { name: 'Bench Press / Overhead Press', sets: 1, reps: 5, notes: 'Heaviest single set of the week.' },
+            { name: 'Deadlift', sets: 1, reps: 5, notes: 'Heaviest set of the week.' }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    key: 'ppl',
+    label: 'Push / Pull / Legs',
+    description: 'Classic 3-day split by movement pattern — repeat the cycle 2x/week for a 6-day split.',
+    data: {
+      name: 'Push Pull Legs',
+      sessions: [
+        {
+          name: 'Push (Chest, Shoulders, Triceps)',
+          exercises: [
+            { name: 'Barbell Bench Press', sets: 4, reps: '6-8' },
+            { name: 'Overhead Press', sets: 3, reps: '8-10' },
+            { name: 'Incline Dumbbell Press', sets: 3, reps: '10-12' },
+            { name: 'Lateral Raises', sets: 3, reps: '12-15' },
+            { name: 'Triceps Pushdown', sets: 3, reps: '10-12' }
+          ]
+        },
+        {
+          name: 'Pull (Back, Biceps)',
+          exercises: [
+            { name: 'Deadlift', sets: 3, reps: 5, notes: 'Heaviest lift of the week — prioritize form.' },
+            { name: 'Pull-Ups or Lat Pulldown', sets: 4, reps: '6-10' },
+            { name: 'Barbell Row', sets: 3, reps: '8-10' },
+            { name: 'Face Pulls', sets: 3, reps: 15 },
+            { name: 'Barbell or Dumbbell Curl', sets: 3, reps: '10-12' }
+          ]
+        },
+        {
+          name: 'Legs (Quads, Hamstrings, Glutes)',
+          exercises: [
+            { name: 'Squat', sets: 4, reps: '6-8' },
+            { name: 'Romanian Deadlift', sets: 3, reps: '8-10' },
+            { name: 'Leg Press', sets: 3, reps: '10-12' },
+            { name: 'Leg Curl', sets: 3, reps: '12-15' },
+            { name: 'Calf Raises', sets: 4, reps: '15-20' }
+          ]
+        }
+      ]
+    }
+  }
+];
+
 function defaultState() {
   return {
     version: 1,
@@ -348,7 +451,28 @@ function renderRoutineTab() {
     </div>
     ${r.sessions.map((s, sIdx) => renderSessionCard(s, sIdx, r.sessions.length)).join('')}
     <button class="btn primary block" data-action="add-session">+ Add Session</button>
+    ${renderTemplatesPanel()}
     ${renderImportPanel()}
+  `;
+}
+
+function renderTemplatesPanel() {
+  return `
+    <div class="card">
+      <h3>Start from a template</h3>
+      <p class="muted">Adds that program's sessions to your routine — nothing existing is deleted.</p>
+      ${ROUTINE_TEMPLATES.map(t => `
+        <div class="exercise-row">
+          <div class="row between">
+            <div>
+              <h3 style="font-size:0.95rem;">${escapeHtml(t.label)}</h3>
+              <p class="muted">${escapeHtml(t.description)}</p>
+            </div>
+            <button class="btn small" data-action="use-template" data-template="${t.key}">Use</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
   `;
 }
 
@@ -616,6 +740,36 @@ function importDataFromFile(file) {
   reader.readAsText(file);
 }
 
+function sessionsFromRoutineData(routineData) {
+  return routineData.sessions.map(s => ({
+    id: uid(),
+    name: String(s.name || 'Untitled Session'),
+    exercises: Array.isArray(s.exercises) ? s.exercises.map(e => ({
+      id: uid(),
+      name: String(e.name || ''),
+      targetSets: Number(e.sets != null ? e.sets : e.targetSets) || 3,
+      targetReps: String(e.reps != null ? e.reps : (e.targetReps != null ? e.targetReps : '10')),
+      notes: e.notes ? String(e.notes) : ''
+    })) : []
+  }));
+}
+
+// Adds a routine's sessions to the current routine (never deletes existing ones).
+function applyRoutineData(routineData, confirmMessage) {
+  const newSessions = sessionsFromRoutineData(routineData);
+  if (newSessions.length === 0) {
+    alert('No sessions found.');
+    return false;
+  }
+  const msg = confirmMessage || `Import ${newSessions.length} session(s) into your routine? Existing sessions are kept.`;
+  if (!confirm(msg)) return false;
+  const wasEmpty = state.routine.sessions.length === 0;
+  state.routine.sessions.push(...newSessions);
+  if (wasEmpty && routineData.name) state.routine.name = String(routineData.name);
+  saveState();
+  return true;
+}
+
 function importRoutineFromJsonText(text) {
   let parsed;
   try {
@@ -631,27 +785,7 @@ function importRoutineFromJsonText(text) {
     alert('JSON must have a "sessions" array (each with a "name" and "exercises").');
     return false;
   }
-  const newSessions = routineData.sessions.map(s => ({
-    id: uid(),
-    name: String(s.name || 'Untitled Session'),
-    exercises: Array.isArray(s.exercises) ? s.exercises.map(e => ({
-      id: uid(),
-      name: String(e.name || ''),
-      targetSets: Number(e.sets != null ? e.sets : e.targetSets) || 3,
-      targetReps: String(e.reps != null ? e.reps : (e.targetReps != null ? e.targetReps : '10')),
-      notes: e.notes ? String(e.notes) : ''
-    })) : []
-  }));
-  if (newSessions.length === 0) {
-    alert('No sessions found in that JSON.');
-    return false;
-  }
-  if (!confirm(`Import ${newSessions.length} session(s) into your routine? Existing sessions are kept.`)) return false;
-  const wasEmpty = state.routine.sessions.length === 0;
-  state.routine.sessions.push(...newSessions);
-  if (wasEmpty && routineData.name) state.routine.name = String(routineData.name);
-  saveState();
-  return true;
+  return applyRoutineData(routineData);
 }
 
 function clearAllData() {
@@ -832,6 +966,16 @@ document.addEventListener('click', (e) => {
     case 'download-sample-routine':
       downloadJson('gym-companion-sample-routine.json', SAMPLE_ROUTINE);
       break;
+    case 'use-template': {
+      const tpl = ROUTINE_TEMPLATES.find(t => t.key === target.dataset.template);
+      if (!tpl) break;
+      const msg = `Add "${tpl.label}" (${tpl.data.sessions.length} sessions) to your routine? Existing sessions are kept.`;
+      if (applyRoutineData(tpl.data, msg)) {
+        render();
+        showToast(`${tpl.label} added.`);
+      }
+      break;
+    }
   }
 });
 
