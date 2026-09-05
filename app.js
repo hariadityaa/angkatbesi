@@ -142,8 +142,8 @@ function defaultState() {
       expandedHistoryIds: [],
       historyViewMode: 'sessions',
       historyExerciseFilter: '',
-      importPanelOpen: false,
-      templatesPanelOpen: false
+      quickStartOpen: false,
+      quickStartMode: 'templates'
     }
   };
 }
@@ -452,53 +452,55 @@ function renderRoutineTab() {
     </div>
     ${r.sessions.map((s, sIdx) => renderSessionCard(s, sIdx, r.sessions.length)).join('')}
     <button class="btn primary block" data-action="add-session">+ Add Session</button>
-    ${renderTemplatesPanel()}
-    ${renderImportPanel()}
+    ${renderQuickStartPanel()}
   `;
 }
 
-function renderTemplatesPanel() {
-  const open = state.ui.templatesPanelOpen;
+function renderQuickStartPanel() {
+  const open = state.ui.quickStartOpen;
+  const mode = state.ui.quickStartMode || 'templates';
   return `
     <div class="card">
-      <div class="row between" data-action="toggle-templates-panel" style="cursor:pointer;">
-        <h3>Start from a template</h3>
+      <div class="row between" data-action="toggle-quickstart" style="cursor:pointer;">
+        <h3>Quick start</h3>
         <span class="icon-btn">${open ? '▾' : '▸'}</span>
       </div>
       ${open ? `
-        <p class="muted">Adds that program's sessions to your routine — nothing existing is deleted.</p>
-        ${ROUTINE_TEMPLATES.map(t => `
-          <div class="exercise-row">
-            <div class="row between">
-              <div>
-                <h3 style="font-size:0.95rem;">${escapeHtml(t.label)}</h3>
-                <p class="muted">${escapeHtml(t.description)}</p>
-              </div>
-              <button class="btn small" data-action="use-template" data-template="${t.key}">Use</button>
-            </div>
-          </div>
-        `).join('')}
+        <div class="tabs-toggle" style="margin-top:10px;">
+          <button class="${mode === 'templates' ? 'active' : ''}" data-action="quickstart-tab" data-mode="templates">Templates</button>
+          <button class="${mode === 'json' ? 'active' : ''}" data-action="quickstart-tab" data-mode="json">Paste JSON</button>
+        </div>
+        ${mode === 'templates' ? renderTemplatesList() : renderImportJsonForm()}
       ` : ''}
     </div>
   `;
 }
 
-function renderImportPanel() {
-  const open = state.ui.importPanelOpen;
+function renderTemplatesList() {
   return `
-    <div class="card">
-      <div class="row between" data-action="toggle-import-panel" style="cursor:pointer;">
-        <h3>Import routine (paste JSON)</h3>
-        <span class="icon-btn">${open ? '▾' : '▸'}</span>
-      </div>
-      ${open ? `
-        <p class="muted">Paste a routine JSON below. It adds these sessions to your current routine — nothing existing is deleted.</p>
-        <textarea id="import-json-textarea" rows="9" placeholder='{"name":"My Program","sessions":[{"name":"Day 1","exercises":[{"name":"Bench Press","sets":3,"reps":"8-12","notes":"optional cue"}]}]}'></textarea>
-        <div class="row wrap" style="margin-top:8px;">
-          <button class="btn primary" data-action="import-routine-json">Import</button>
-          <button class="btn small" data-action="download-sample-routine">Download sample JSON</button>
+    <p class="muted">Adds that program's sessions to your routine — nothing existing is deleted.</p>
+    ${ROUTINE_TEMPLATES.map(t => `
+      <div class="exercise-row">
+        <div class="row between">
+          <div>
+            <h3 style="font-size:0.95rem;">${escapeHtml(t.label)}</h3>
+            <p class="muted">${escapeHtml(t.description)}</p>
+          </div>
+          <button class="btn small" data-action="use-template" data-template="${t.key}">Use</button>
         </div>
-      ` : ''}
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderImportJsonForm() {
+  return `
+    <p class="muted">Edit the sample below or paste your own — importing adds these sessions to your current routine without deleting anything.</p>
+    <textarea id="import-json-textarea" rows="9">${escapeHtml(JSON.stringify(SAMPLE_ROUTINE, null, 2))}</textarea>
+    <button class="btn primary block" style="margin-top:10px;" data-action="import-routine-json">Import</button>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn small ghost" data-action="copy-sample-routine">Copy sample</button>
+      <button class="btn small ghost" data-action="download-sample-routine">Download sample</button>
     </div>
   `;
 }
@@ -956,20 +958,20 @@ document.addEventListener('click', (e) => {
     case 'clear-all-data':
       clearAllData();
       break;
-    case 'toggle-templates-panel':
-      state.ui.templatesPanelOpen = !state.ui.templatesPanelOpen;
+    case 'toggle-quickstart':
+      state.ui.quickStartOpen = !state.ui.quickStartOpen;
       saveState();
       render();
       break;
-    case 'toggle-import-panel':
-      state.ui.importPanelOpen = !state.ui.importPanelOpen;
+    case 'quickstart-tab':
+      state.ui.quickStartMode = target.dataset.mode;
       saveState();
       render();
       break;
     case 'import-routine-json': {
       const text = document.getElementById('import-json-textarea').value;
       if (importRoutineFromJsonText(text)) {
-        state.ui.importPanelOpen = false;
+        state.ui.quickStartOpen = false;
         render();
         showToast('Routine imported.');
       }
@@ -978,6 +980,17 @@ document.addEventListener('click', (e) => {
     case 'download-sample-routine':
       downloadJson('gym-companion-sample-routine.json', SAMPLE_ROUTINE);
       break;
+    case 'copy-sample-routine': {
+      const text = JSON.stringify(SAMPLE_ROUTINE, null, 2);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => showToast('Sample JSON copied.'))
+          .catch(() => alert('Could not copy — your browser blocked clipboard access.'));
+      } else {
+        alert('Clipboard access isn\'t available here — use Download sample instead.');
+      }
+      break;
+    }
     case 'use-template': {
       const tpl = ROUTINE_TEMPLATES.find(t => t.key === target.dataset.template);
       if (!tpl) break;
