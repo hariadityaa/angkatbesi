@@ -340,7 +340,7 @@ function renderRestBanner() {
         <span id="rest-remaining" class="rest-remaining-text">${formatMMSS(restState.remaining)}</span>
       </div>
       <div class="rest-progress-track"><div class="rest-progress-fill" id="rest-progress-bar" style="width:${pct}%"></div></div>
-      <div class="row" style="margin-top:8px;">
+      <div class="row mt-2">
         <button class="btn small" data-action="rest-sub15">−15s</button>
         <button class="btn small" data-action="rest-add15">+15s</button>
         <button class="btn small ghost" data-action="rest-skip">Skip rest</button>
@@ -350,6 +350,20 @@ function renderRestBanner() {
 }
 
 // ---------- Rendering ----------
+
+// Lucide-style outline icons (1.5px stroke, inherits currentColor)
+const ICONS = {
+  trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>',
+  up: '<path d="m6 15 6-6 6 6"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  chevDown: '<path d="m6 9 6 6 6-6"/>',
+  chevRight: '<path d="m9 6 6 6-6 6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>'
+};
+function icon(name) {
+  return '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+
 
 function render() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -411,12 +425,12 @@ function renderActiveWorkout(draft) {
             <h3>${escapeHtml(ex.name)}</h3>
             <span class="pill">target ${ex.targetSets}x${escapeHtml(ex.targetReps)}</span>
           </div>
-          ${ex.notes ? `<p class="muted" style="margin:2px 0 8px;">${escapeHtml(ex.notes)}</p>` : ''}
-          <div class="row muted" style="margin: 6px 0 8px;">
-            <span style="width:28px;text-align:center;">#</span>
+          ${ex.notes ? `<p class="muted">${escapeHtml(ex.notes)}</p>` : ''}
+          <div class="row muted set-head">
+            <span class="num-col">#</span>
             <span class="grow">Reps</span>
             <span class="grow">Weight (${unitLabel()})</span>
-            <span style="width:40px;"></span>
+            <span class="chk-col"></span>
           </div>
           ${ex.sets.map((set, i) => `
             <div class="set-row ${set.done ? 'done' : ''}">
@@ -428,10 +442,10 @@ function renderActiveWorkout(draft) {
                 data-field="set-weight" data-exercise-id="${ex.exerciseId}" data-set-index="${i}"
                 value="${escapeHtml(set.weight)}">
               <button class="check-btn ${set.done ? 'checked' : ''}"
-                data-action="toggle-set-done" data-exercise-id="${ex.exerciseId}" data-set-index="${i}">✓</button>
+                data-action="toggle-set-done" data-exercise-id="${ex.exerciseId}" data-set-index="${i}"aria-label="Mark set done">${icon('check')}</button>
             </div>
           `).join('')}
-          <div class="row" style="margin-top:6px;">
+          <div class="row mt-2">
             <button class="btn small" data-action="add-set" data-exercise-id="${ex.exerciseId}">+ Add set</button>
             <button class="btn small ghost" data-action="remove-set" data-exercise-id="${ex.exerciseId}">− Remove set</button>
           </div>
@@ -461,12 +475,12 @@ function renderQuickStartPanel() {
   const mode = state.ui.quickStartMode || 'templates';
   return `
     <div class="card">
-      <div class="row between" data-action="toggle-quickstart" style="cursor:pointer;">
+      <div data-action="toggle-quickstart" class="row between clickable">
         <h3>Quick start</h3>
-        <span class="icon-btn">${open ? '▾' : '▸'}</span>
+        <span class="icon-btn">${icon(open ? 'chevDown' : 'chevRight')}</span>
       </div>
       ${open ? `
-        <div class="tabs-toggle" style="margin-top:10px;">
+        <div class="tabs-toggle mt-3">
           <button class="${mode === 'templates' ? 'active' : ''}" data-action="quickstart-tab" data-mode="templates">Templates</button>
           <button class="${mode === 'json' ? 'active' : ''}" data-action="quickstart-tab" data-mode="json">Paste JSON</button>
         </div>
@@ -483,7 +497,7 @@ function renderTemplatesList() {
       <div class="exercise-row">
         <div class="row between">
           <div>
-            <h3 style="font-size:0.95rem;">${escapeHtml(t.label)}</h3>
+            <h3>${escapeHtml(t.label)}</h3>
             <p class="muted">${escapeHtml(t.description)}</p>
           </div>
           <button class="btn small" data-action="use-template" data-template="${t.key}">Use</button>
@@ -497,8 +511,8 @@ function renderImportJsonForm() {
   return `
     <p class="muted">Edit the sample below or paste your own — importing adds these sessions to your current routine without deleting anything.</p>
     <textarea id="import-json-textarea" rows="9">${escapeHtml(JSON.stringify(SAMPLE_ROUTINE, null, 2))}</textarea>
-    <button class="btn primary block" style="margin-top:10px;" data-action="import-routine-json">Import</button>
-    <div class="row" style="margin-top:8px;">
+    <button class="btn primary block mt-3" data-action="import-routine-json">Import</button>
+    <div class="row mt-2">
       <button class="btn small ghost" data-action="copy-sample-routine">Copy sample</button>
       <button class="btn small ghost" data-action="download-sample-routine">Download sample</button>
     </div>
@@ -512,18 +526,18 @@ function renderSessionCard(s, sIdx, total) {
       <div class="row between">
         <input type="text" class="grow" data-field="session-name" data-session-id="${s.id}" value="${escapeHtml(s.name)}">
         <div class="reorder-btns">
-          <button class="icon-btn" data-action="move-session-up" data-session-id="${s.id}" ${sIdx === 0 ? 'disabled' : ''}>▲</button>
-          <button class="icon-btn" data-action="move-session-down" data-session-id="${s.id}" ${sIdx === total - 1 ? 'disabled' : ''}>▼</button>
+          <button class="icon-btn" data-action="move-session-up" data-session-id="${s.id}" ${sIdx === 0 ? 'disabled' : ''}aria-label="Move up">${icon('up')}</button>
+          <button class="icon-btn" data-action="move-session-down" data-session-id="${s.id}" ${sIdx === total - 1 ? 'disabled' : ''}aria-label="Move down">${icon('down')}</button>
         </div>
-        <button class="icon-btn" data-action="toggle-session-expand" data-session-id="${s.id}">${expanded ? '▾' : '▸'}</button>
-        <button class="icon-btn" data-action="delete-session" data-session-id="${s.id}">🗑</button>
+        <button class="icon-btn" data-action="toggle-session-expand" data-session-id="${s.id}">${icon(expanded ? 'chevDown' : 'chevRight')}</button>
+        <button class="icon-btn" data-action="delete-session" data-session-id="${s.id}"aria-label="Delete">${icon('trash')}</button>
       </div>
       ${expanded ? `
         <hr class="divider">
         ${s.exercises.map((ex, eIdx) => `
           <div class="exercise-row">
             <div class="row wrap">
-              <input type="text" class="grow" style="min-width:120px;" placeholder="Exercise name"
+              <input type="text" class="grow" style="min-width:128px;" placeholder="Exercise name"
                 data-field="exercise-name" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.name)}">
               <div style="width:56px;">
                 <label class="field-label">Sets</label>
@@ -534,16 +548,16 @@ function renderSessionCard(s, sIdx, total) {
                 <input type="text" inputmode="numeric" placeholder="e.g. 8-12" data-field="target-reps" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.targetReps)}">
               </div>
               <div class="reorder-btns">
-                <button class="icon-btn" data-action="move-exercise-up" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === 0 ? 'disabled' : ''}>▲</button>
-                <button class="icon-btn" data-action="move-exercise-down" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === s.exercises.length - 1 ? 'disabled' : ''}>▼</button>
+                <button class="icon-btn" data-action="move-exercise-up" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === 0 ? 'disabled' : ''}aria-label="Move up">${icon('up')}</button>
+                <button class="icon-btn" data-action="move-exercise-down" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === s.exercises.length - 1 ? 'disabled' : ''}aria-label="Move down">${icon('down')}</button>
               </div>
-              <button class="icon-btn" data-action="delete-exercise" data-session-id="${s.id}" data-exercise-id="${ex.id}">🗑</button>
+              <button class="icon-btn" data-action="delete-exercise" data-session-id="${s.id}" data-exercise-id="${ex.id}"aria-label="Delete">${icon('trash')}</button>
             </div>
-            <input type="text" style="margin-top:6px;" placeholder="Notes (optional)"
+            <input type="text" class="mt-2" placeholder="Notes (optional)"
               data-field="exercise-notes" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.notes || '')}">
           </div>
         `).join('')}
-        <button class="btn small" style="margin-top:10px;" data-action="add-exercise" data-session-id="${s.id}">+ Add Exercise</button>
+        <button class="btn small mt-3" data-action="add-exercise" data-session-id="${s.id}">+ Add Exercise</button>
       ` : `<p class="muted">${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'}</p>`}
     </div>
   `;
@@ -602,7 +616,7 @@ function renderHistoryTab() {
             <h3>${escapeHtml(entry.sessionName)}</h3>
             <p class="muted">${formatDate(entry.date)}</p>
           </div>
-          <button class="icon-btn" data-action="delete-history-entry" data-entry-id="${entry.id}">🗑</button>
+          <button class="icon-btn" data-action="delete-history-entry" data-entry-id="${entry.id}"aria-label="Delete">${icon('trash')}</button>
         </div>
         ${expanded ? `
           <div class="history-detail">
@@ -633,7 +647,7 @@ function renderSettingsTab() {
     <div class="card">
       <h3>Backup your data</h3>
       <p class="muted">Everything is stored only in this browser. Export a backup occasionally so you don't lose it if you clear browser data or switch phones.</p>
-      <div class="row wrap" style="margin-top:8px;">
+      <div class="row wrap mt-2">
         <button class="btn" data-action="export-data">Export backup (.json)</button>
         <button class="btn" data-action="import-data">Import backup</button>
       </div>
