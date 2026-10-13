@@ -370,13 +370,25 @@ function render() {
     btn.classList.toggle('active', btn.dataset.tab === state.ui.activeTab);
   });
   const app = document.getElementById('app');
+  let html;
   switch (state.ui.activeTab) {
-    case 'train': app.innerHTML = renderTrainTab(); break;
-    case 'routine': app.innerHTML = renderRoutineTab(); break;
-    case 'history': app.innerHTML = renderHistoryTab(); break;
-    case 'settings': app.innerHTML = renderSettingsTab(); break;
-    default: app.innerHTML = renderTrainTab();
+    case 'routine': html = renderRoutineTab(); break;
+    case 'history': html = renderHistoryTab(); break;
+    case 'settings': html = renderSettingsTab(); break;
+    default: html = renderTrainTab();
   }
+  app.innerHTML = renderUpdateBanner() + html;
+}
+
+// ---------- Update banner ----------
+let updateReady = false;
+function renderUpdateBanner() {
+  if (!updateReady) return '';
+  return `
+    <div class="card update-banner" role="status">
+      <p><strong>A new version of Iron Log is ready.</strong></p>
+      <button class="btn primary block mt-2" data-action="update-app">Update now</button>
+    </div>`;
 }
 
 // ---------- Install ----------
@@ -415,6 +427,19 @@ async function handleInstall() {
   installEvent = null;
   render();
   if (e) await e.prompt().catch(() => {});
+}
+
+function renderInstallSettings() {
+  if (isStandalone()) return '';
+  const body = installEvent
+    ? '<button class="btn primary block mt-2" data-action="install-app">Install app</button>'
+    : `<p class="muted">Android Chrome: an <strong>Install app</strong> button appears here once Chrome allows it. Reload and wait a few seconds. If an old HeavyHo icon is on your home screen, uninstall it first.</p>
+       <p class="muted">iPhone Safari: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>`;
+  return `
+    <div class="card">
+      <h3>Install app</h3>
+      ${body}
+    </div>`;
 }
 
 function handleDeclineInstall() {
@@ -679,6 +704,7 @@ function renderHistoryTab() {
 function renderSettingsTab() {
   return `
     <div class="top-bar"><h1>Settings</h1></div>
+    ${renderInstallSettings()}
     <div class="card">
       <label class="field-label">Weight unit label</label>
       <input type="text" data-field="unit" value="${escapeHtml(state.unit)}" maxlength="6">
@@ -889,6 +915,9 @@ document.addEventListener('click', (e) => {
       break;
     case 'finish-workout':
       handleFinishWorkout();
+      break;
+    case 'update-app':
+      window.location.reload();
       break;
     case 'install-app':
       handleInstall();
@@ -1162,19 +1191,26 @@ document.addEventListener('change', (e) => {
 
 render();
 
+// ---------- Updates ----------
+// A new deploy ships a new sw.js. It installs, takes over at once and fires
+// controllerchange. The open page still runs the old code, so offer a reload
+// instead of reloading mid-workout. The installed app can sit in the background
+// for days, so also check when it comes back to the foreground.
+const UPDATE_CHECK_MS = 30 * 60 * 1000;
 if ('serviceWorker' in navigator) {
-  // Once a newer service worker takes control, reload so the update is visible
-  // right away instead of leaving the tab on stale cached content.
-  let hadController = !!navigator.serviceWorker.controller;
-  let reloading = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController) { hadController = true; return; }
-    if (reloading) return;
-    reloading = true;
-    window.location.reload();
+  const sw = navigator.serviceWorker;
+  // The first install also fires controllerchange. That is not an update.
+  let hadController = !!sw.controller;
+  sw.addEventListener('controllerchange', () => {
+    if (hadController) { updateReady = true; render(); }
+    hadController = true;
   });
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    sw.register('sw.js').then((reg) => {
+      const check = () => reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+      setInterval(check, UPDATE_CHECK_MS);
+    }).catch(() => {});
   });
 }
