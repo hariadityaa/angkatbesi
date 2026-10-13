@@ -235,6 +235,151 @@ function allKnownExerciseNames() {
   return Array.from(names).filter(Boolean).sort((a, b) => a.localeCompare(b));
 }
 
+// ---------- Progress & stats (all derived from history, nothing extra stored) ----------
+
+function isNum(v) {
+  return v != null && v !== '' && !isNaN(Number(v));
+}
+
+function roundWeight(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function weightIncrement() {
+  return /lb/i.test(state.unit || '') ? 5 : 2.5;
+}
+
+// Heaviest completed set, or null for bodyweight / nothing completed.
+function topWeight(sets) {
+  const w = sets.filter(s => s.completed && isNum(s.weight) && Number(s.weight) > 0).map(s => Number(s.weight));
+  return w.length ? Math.max(...w) : null;
+}
+
+// Next workout's weights: last session's, plus one increment if every set was completed.
+function progressionFor(exerciseId, name) {
+  const prev = lastLoggedSets(exerciseId, name);
+  if (!prev || !prev.length) return null;
+  const inc = prev.every(s => s.completed) ? weightIncrement() : 0;
+  const weights = prev.map(s => isNum(s.weight) && Number(s.weight) > 0 ? roundWeight(Number(s.weight) + inc) : null);
+  const used = prev.filter(s => isNum(s.weight) && Number(s.weight) > 0).map(s => Number(s.weight));
+  const last = used.length ? Math.max(...used) : null;
+  return { weights, last, next: last == null ? null : roundWeight(last + inc), up: inc > 0 && last != null };
+}
+
+function entryVolume(entry) {
+  let v = 0;
+  for (const ex of entry.exercises) {
+    for (const s of ex.sets) {
+      if (s.completed && isNum(s.reps) && isNum(s.weight)) v += Number(s.reps) * Number(s.weight);
+    }
+  }
+  return v;
+}
+
+function entrySetCounts(entry) {
+  let done = 0, total = 0;
+  for (const ex of entry.exercises) {
+    for (const s of ex.sets) { total++; if (s.completed) done++; }
+  }
+  return { done, total };
+}
+
+function formatVolume(v) {
+  return v >= 10000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v).toLocaleString();
+}
+
+function formatDuration(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+// Walk history oldest-first. A PR is a completed set heavier than any earlier one for that exercise.
+function prsByEntry() {
+  const best = new Map();
+  const out = new Map();
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    const entry = state.history[i];
+    const prs = [];
+    for (const ex of entry.exercises) {
+      const key = ex.name.trim().toLowerCase();
+      const top = topWeight(ex.sets);
+      if (top == null) continue;
+      if (best.has(key) && top > best.get(key)) prs.push({ name: ex.name, weight: top, gain: roundWeight(top - best.get(key)) });
+      if (!best.has(key) || top > best.get(key)) best.set(key, top);
+    }
+    out.set(entry.id, prs);
+  }
+  return out;
+}
+
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+// Weeks start on Monday.
+function startOfWeek(d) {
+  const x = startOfDay(d);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+
+function daysAgo(iso) {
+  return Math.round((startOfDay(new Date()) - startOfDay(new Date(iso))) / 86400000);
+}
+
+function relativeDay(iso) {
+  const n = daysAgo(iso);
+  if (n <= 0) return 'today';
+  if (n === 1) return 'yesterday';
+  if (n < 14) return `${n} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// Consecutive weeks with at least one session. This week counts once it has one.
+function weekStreak() {
+  const weeks = new Set(state.history.map(h => startOfWeek(new Date(h.date)).getTime()));
+  const w = startOfWeek(new Date());
+  if (!weeks.has(w.getTime())) w.setDate(w.getDate() - 7);
+  let n = 0;
+  while (weeks.has(w.getTime())) { n++; w.setDate(w.getDate() - 7); }
+  return n;
+}
+
+// The session after the last one logged, in routine order. Skips sessions with no exercises.
+function nextSession() {
+  const sessions = state.routine.sessions.filter(s => s.exercises.length);
+  if (!sessions.length) return null;
+  const last = state.history[0];
+  if (!last) return sessions[0];
+  let i = sessions.findIndex(s => s.id === last.sessionId);
+  if (i === -1) i = sessions.findIndex(s => s.name === last.sessionName);
+  return sessions[(i + 1) % sessions.length];
+}
+
+function lastDoneFor(session) {
+  const h = state.history.find(e => e.sessionId === session.id) ||
+    state.history.find(e => e.sessionName === session.name);
+  return h ? h.date : null;
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function sparkline(values) {
+  if (values.length < 2) return '';
+  const min = Math.min(...values);
+  const span = (Math.max(...values) - min) || 1;
+  const pts = values.map((v, i) =>
+    `${(i / (values.length - 1) * 100).toFixed(2)},${(30 - (v - min) / span * 28).toFixed(2)}`).join(' ');
+  return `<svg class="sparkline" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`;
+}
+
 function showToast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -378,6 +523,7 @@ function render() {
     default: html = renderTrainTab();
   }
   app.innerHTML = renderUpdateBanner() + html;
+  justChecked = null;
 }
 
 // ---------- Update banner ----------
@@ -447,38 +593,190 @@ function handleDeclineInstall() {
   render();
 }
 
+let finishSummary = null; // { entryId } of the session just finished, until dismissed
+
 function renderTrainTab() {
   if (state.activeWorkoutDraft) return renderActiveWorkout(state.activeWorkoutDraft);
+  if (finishSummary) return renderFinishSummary();
 
   const sessions = state.routine.sessions;
-  if (sessions.length === 0) {
+  const next = nextSession();
+  if (!next) {
+    if (sessions.length) {
+      return `
+        <div class="top-bar"><h1>Train</h1></div>
+        ${renderInstallCard()}
+        <div class="empty-state">
+          <p>Your sessions have no exercises yet.</p>
+          <button class="btn primary mt-3" data-action="go-routine">Add exercises</button>
+        </div>`;
+    }
     return `
       <div class="top-bar"><h1>Train</h1></div>
       ${renderInstallCard()}
-      <div class="empty-state">
-        <p>No sessions set up yet.</p>
-        <p>Go to the <strong>Routine</strong> tab to add your first session and exercises.</p>
+      <div class="card hero">
+        <p class="eyebrow">Get started</p>
+        <h2>Pick a program</h2>
+        <p class="muted">One tap sets up your routine. You can edit everything later.</p>
+        <div class="mt-3">${renderTemplateRows()}</div>
+        <button class="btn ghost block mt-3" data-action="build-own">Or build your own</button>
       </div>`;
   }
 
+  const others = sessions.filter(s => s !== next && s.exercises.length);
   return `
-    <div class="top-bar"><h1>Train</h1></div>
-    ${renderInstallCard()}
-    ${sessions.map(s => `
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <h3>${escapeHtml(s.name)}</h3>
-            <p class="muted">${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'}</p>
-          </div>
-          <button class="btn primary" data-action="start-session" data-session-id="${s.id}">Start</button>
-        </div>
+    <div class="top-bar">
+      <div>
+        <h1>Train</h1>
+        <p class="muted">${greeting()}. ${escapeHtml(next.name)} is up.</p>
       </div>
-    `).join('')}
+    </div>
+    ${renderInstallCard()}
+    ${renderWeekCard()}
+    ${renderStatTiles()}
+    ${renderNextUpCard(next)}
+    ${others.length ? `
+      <div class="card">
+        <p class="eyebrow">Or pick another</p>
+        ${others.map(s => {
+          const last = lastDoneFor(s);
+          return `
+          <div class="row between other-row">
+            <div>
+              <h3>${escapeHtml(s.name)}</h3>
+              <p class="muted">${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'} · ${last ? 'last ' + relativeDay(last) : 'not done yet'}</p>
+            </div>
+            <button class="btn small" data-action="start-session" data-session-id="${s.id}">Start</button>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
   `;
 }
 
+function renderWeekCard() {
+  const trained = new Set(state.history.map(h => startOfDay(new Date(h.date)).getTime()));
+  const today = startOfDay(new Date()).getTime();
+  const day = startOfWeek(new Date());
+  let count = 0;
+  const dots = [];
+  for (let i = 0; i < 7; i++) {
+    const t = day.getTime();
+    const on = trained.has(t);
+    if (on) count++;
+    dots.push(`<div class="day ${on ? 'on' : ''} ${t === today ? 'today' : ''} ${t > today ? 'future' : ''}">
+      <span class="dot">${on ? icon('check') : ''}</span><span class="day-label">${'MTWTFSS'[i]}</span></div>`);
+    day.setDate(day.getDate() + 1);
+  }
+  const streak = weekStreak();
+  const last = state.history[0];
+  const sub = last ? `Last trained ${relativeDay(last.date)}` : 'Your first session lights up a day.';
+  return `
+    <div class="card">
+      <div class="row between">
+        <div>
+          <h3>${count} session${count === 1 ? '' : 's'} this week</h3>
+          <p class="muted">${sub}</p>
+        </div>
+        ${streak > 1 ? `<span class="pill">${streak}-week streak</span>` : ''}
+      </div>
+      <div class="week-strip">${dots.join('')}</div>
+    </div>`;
+}
+
+function renderStatTiles() {
+  if (!state.history.length) return '';
+  const weekStart = startOfWeek(new Date()).getTime();
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const prs = prsByEntry();
+  let volume = 0, sessions = 0, prCount = 0;
+  for (const h of state.history) {
+    const t = new Date(h.date).getTime();
+    if (t >= weekStart) volume += entryVolume(h);
+    if (t >= monthStart) { sessions++; prCount += (prs.get(h.id) || []).length; }
+  }
+  return `
+    <div class="stat-grid">
+      <div class="stat"><span class="stat-value">${formatVolume(volume)}</span><span class="stat-label">${unitLabel()} lifted this week</span></div>
+      <div class="stat"><span class="stat-value">${sessions}</span><span class="stat-label">sessions this month</span></div>
+      <div class="stat"><span class="stat-value ${prCount ? 'up' : ''}">${prCount}</span><span class="stat-label">PRs this month</span></div>
+    </div>`;
+}
+
+function renderNextUpCard(s) {
+  const last = lastDoneFor(s);
+  return `
+    <div class="card hero">
+      <p class="eyebrow">Next up</p>
+      <h2>${escapeHtml(s.name)}</h2>
+      <p class="muted">${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'} · ${last ? 'last done ' + relativeDay(last) : 'first time'}</p>
+      <ul class="lift-list">
+        ${s.exercises.map(ex => {
+          const p = progressionFor(ex.id, ex.name);
+          let target = '<span class="muted">new</span>';
+          if (p && p.last != null) {
+            target = p.up
+              ? `<span class="muted">${p.last} →</span> <strong class="up">${p.next}</strong>`
+              : `<strong>${p.last}</strong>`;
+          } else if (p) {
+            target = '<span class="muted">—</span>';
+          }
+          return `
+          <li>
+            <span class="lift-name">${escapeHtml(ex.name)}</span>
+            <span class="lift-scheme">${escapeHtml(ex.targetSets)}×${escapeHtml(ex.targetReps)}</span>
+            <span class="lift-target">${target}</span>
+          </li>`;
+        }).join('')}
+      </ul>
+      <button class="btn primary block mt-3" data-action="start-session" data-session-id="${s.id}">Start ${escapeHtml(s.name)}</button>
+    </div>`;
+}
+
+function renderFinishSummary() {
+  const entry = state.history.find(h => h.id === finishSummary.entryId);
+  if (!entry) { finishSummary = null; return renderTrainTab(); }
+  const prs = prsByEntry().get(entry.id) || [];
+  const { done, total } = entrySetCounts(entry);
+  const duration = entry.startedAt ? formatDuration(new Date(entry.date) - new Date(entry.startedAt)) : '—';
+  const next = nextSession();
+  return `
+    <div class="summary">
+      <div class="summary-badge">${icon('check')}</div>
+      <h1>${escapeHtml(entry.sessionName)} done</h1>
+      <p class="muted">${formatDate(entry.date)}</p>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><span class="stat-value">${duration}</span><span class="stat-label">duration</span></div>
+      <div class="stat"><span class="stat-value">${formatVolume(entryVolume(entry))}</span><span class="stat-label">${unitLabel()} lifted</span></div>
+      <div class="stat"><span class="stat-value">${done}/${total}</span><span class="stat-label">sets done</span></div>
+    </div>
+    <div class="card">
+      ${prs.length ? `
+        <p class="eyebrow">New personal bests</p>
+        <ul class="lift-list">
+          ${prs.map(pr => `
+            <li>
+              <span class="lift-name">${escapeHtml(pr.name)}</span>
+              <span class="lift-target"><strong class="up">${pr.weight}${unitLabel()}</strong> <span class="muted">+${pr.gain}</span></span>
+            </li>`).join('')}
+        </ul>
+      ` : `
+        <p class="eyebrow">Logged</p>
+        <p class="muted">No new bests today. Weights carry over to next time.</p>
+      `}
+      ${next ? `<p class="muted mt-2">Next time: <strong>${escapeHtml(next.name)}</strong></p>` : ''}
+    </div>
+    <button class="btn primary block" data-action="dismiss-summary">Done</button>
+  `;
+}
+
+let justChecked = null; // "exerciseId:setIndex" of the set just ticked, so only it animates
+
 function renderActiveWorkout(draft) {
+  let done = 0, total = 0;
+  for (const ex of draft.exercises) for (const set of ex.sets) { total++; if (set.done) done++; }
+  const pct = total ? Math.round(done / total * 100) : 0;
   return `
     <div class="top-bar">
       <div>
@@ -487,13 +785,22 @@ function renderActiveWorkout(draft) {
       </div>
       <button class="btn ghost" data-action="cancel-workout">Cancel</button>
     </div>
+    <div class="progress-strip">
+      <div class="row between">
+        <span class="muted">${done === total && total ? 'All sets done' : 'Progress'}</span>
+        <span class="mono">${done}/${total} sets</span>
+      </div>
+      <div class="rest-progress-track"><div class="rest-progress-fill" style="width:${pct}%"></div></div>
+    </div>
     ${renderRestBanner()}
     <div class="card">
       ${draft.exercises.map(ex => `
         <div class="exercise-row">
           <div class="row between">
             <h3>${escapeHtml(ex.name)}</h3>
-            <span class="pill">target ${ex.targetSets}x${escapeHtml(ex.targetReps)}</span>
+            ${ex.sets.length && ex.sets.every(set => set.done)
+              ? `<span class="pill success">${icon('check')} done</span>`
+              : `<span class="pill">target ${ex.targetSets}x${escapeHtml(ex.targetReps)}</span>`}
           </div>
           ${ex.notes ? `<p class="muted">${escapeHtml(ex.notes)}</p>` : ''}
           <div class="row muted set-head">
@@ -511,7 +818,7 @@ function renderActiveWorkout(draft) {
               <input type="number" inputmode="decimal" min="0" step="0.5" placeholder="${unitLabel()}"
                 data-field="set-weight" data-exercise-id="${ex.exerciseId}" data-set-index="${i}"
                 value="${escapeHtml(set.weight)}">
-              <button class="check-btn ${set.done ? 'checked' : ''}"
+              <button class="check-btn ${set.done ? 'checked' : ''} ${justChecked === ex.exerciseId + ':' + i ? 'pop' : ''}"
                 data-action="toggle-set-done" data-exercise-id="${ex.exerciseId}" data-set-index="${i}"aria-label="Mark set done">${icon('check')}</button>
             </div>
           `).join('')}
@@ -563,6 +870,12 @@ function renderQuickStartPanel() {
 function renderTemplatesList() {
   return `
     <p class="muted">Adds that program's sessions to your routine — nothing existing is deleted.</p>
+    ${renderTemplateRows()}
+  `;
+}
+
+function renderTemplateRows() {
+  return `
     ${ROUTINE_TEMPLATES.map(t => `
       <div class="exercise-row">
         <div class="row between">
@@ -649,13 +962,15 @@ function renderHistoryTab() {
   if (mode === 'exercise') {
     const names = allKnownExerciseNames();
     const selected = names.includes(state.ui.historyExerciseFilter) ? state.ui.historyExerciseFilter : (names[0] || '');
+    const prs = prsByEntry();
     const rows = [];
     // oldest first, so progression reads top-to-bottom
     for (let i = state.history.length - 1; i >= 0; i--) {
       const entry = state.history[i];
       const ex = entry.exercises.find(e => e.name === selected);
-      if (ex) rows.push({ date: entry.date, sets: ex.sets });
+      if (ex) rows.push({ date: entry.date, sets: ex.sets, top: topWeight(ex.sets), pr: (prs.get(entry.id) || []).some(p => p.name === ex.name) });
     }
+    const tops = rows.map(r => r.top).filter(t => t != null);
     return `
       <div class="top-bar"><h1>History</h1></div>
       ${toggle}
@@ -665,26 +980,39 @@ function renderHistoryTab() {
           ${names.map(n => `<option value="${escapeHtml(n)}" ${n === selected ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}
         </select>
       </div>
+      ${tops.length ? `
+        <div class="card">
+          <div class="stat-grid flat">
+            <div class="stat"><span class="stat-value">${Math.max(...tops)}</span><span class="stat-label">best ${unitLabel()}</span></div>
+            <div class="stat"><span class="stat-value">${tops[tops.length - 1]}</span><span class="stat-label">latest ${unitLabel()}</span></div>
+            <div class="stat"><span class="stat-value">${rows.length}</span><span class="stat-label">sessions</span></div>
+          </div>
+          ${sparkline(tops)}
+        </div>` : ''}
       ${rows.length === 0 ? '<p class="muted">No logged sets for this exercise yet.</p>' : rows.map(r => `
         <div class="card">
-          <p class="muted">${formatDate(r.date)}</p>
+          <div class="row between"><p class="muted">${formatDate(r.date)}</p>${r.pr ? '<span class="pill success">PR</span>' : ''}</div>
           <p>${r.sets.map(s => `${escapeHtml(s.reps)}${s.weight != null && s.weight !== '' ? ' @ ' + escapeHtml(s.weight) + unitLabel() : ''}`).join(', ')}</p>
         </div>
       `).join('')}
     `;
   }
 
+  const prs = prsByEntry();
   return `
     <div class="top-bar"><h1>History</h1></div>
     ${toggle}
     ${state.history.map(entry => {
       const expanded = state.ui.expandedHistoryIds.includes(entry.id);
+      const prCount = (prs.get(entry.id) || []).length;
+      const { done } = entrySetCounts(entry);
       return `
       <div class="card">
         <div class="history-entry-header" data-action="toggle-history-expand" data-entry-id="${entry.id}">
           <div>
             <h3>${escapeHtml(entry.sessionName)}</h3>
             <p class="muted">${formatDate(entry.date)}</p>
+            <p class="muted mono">${formatVolume(entryVolume(entry))} ${unitLabel()} · ${done} sets${prCount ? ` · <span class="up">${prCount} PR${prCount === 1 ? '' : 's'}</span>` : ''}</p>
           </div>
           <button class="icon-btn" data-action="delete-history-entry" data-entry-id="${entry.id}"aria-label="Delete">${icon('trash')}</button>
         </div>
@@ -749,14 +1077,14 @@ function handleStartSession(sessionId) {
     sessionName: s.name,
     startedAt: new Date().toISOString(),
     exercises: s.exercises.map(ex => {
-      const prev = lastLoggedSets(ex.id, ex.name);
+      const prog = progressionFor(ex.id, ex.name);
       const numSets = Number(ex.targetSets) || 1;
       const sets = [];
       for (let i = 0; i < numSets; i++) {
-        const prevSet = prev && prev[i];
+        const w = prog && prog.weights[i];
         sets.push({
           reps: parseRepsLow(ex.targetReps),
-          weight: prevSet && prevSet.weight != null ? String(prevSet.weight) : '',
+          weight: w != null ? String(w) : '',
           done: false
         });
       }
@@ -776,6 +1104,7 @@ function handleFinishWorkout() {
     id: uid(),
     sessionId: draft.sessionId,
     sessionName: draft.sessionName,
+    startedAt: draft.startedAt,
     date: new Date().toISOString(),
     exercises: draft.exercises.map(ex => ({
       exerciseId: ex.exerciseId,
@@ -790,8 +1119,10 @@ function handleFinishWorkout() {
   state.history.unshift(entry);
   state.activeWorkoutDraft = null;
   saveState();
+  finishSummary = { entryId: entry.id };
+  if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
   render();
-  showToast('Session saved to History.');
+  window.scrollTo(0, 0);
 }
 
 function handleCancelWorkout() {
@@ -855,9 +1186,9 @@ function applyRoutineData(routineData, confirmMessage) {
     alert('No sessions found.');
     return false;
   }
-  const msg = confirmMessage || `Import ${newSessions.length} session(s) into your routine? Existing sessions are kept.`;
-  if (!confirm(msg)) return false;
   const wasEmpty = state.routine.sessions.length === 0;
+  const msg = confirmMessage || `Import ${newSessions.length} session(s) into your routine? Existing sessions are kept.`;
+  if (!wasEmpty && !confirm(msg)) return false;
   state.routine.sessions.push(...newSessions);
   if (wasEmpty && routineData.name) state.routine.name = String(routineData.name);
   saveState();
@@ -897,6 +1228,7 @@ document.addEventListener('click', (e) => {
   const tabBtn = e.target.closest('.tab-btn');
   if (tabBtn) {
     state.ui.activeTab = tabBtn.dataset.tab;
+    finishSummary = null;
     saveState();
     render();
     return;
@@ -928,10 +1260,29 @@ document.addEventListener('click', (e) => {
     case 'cancel-workout':
       handleCancelWorkout();
       break;
+    case 'dismiss-summary':
+      finishSummary = null;
+      render();
+      break;
+    case 'go-routine':
+      state.ui.activeTab = 'routine';
+      saveState();
+      render();
+      break;
+    case 'build-own': {
+      const s = { id: uid(), name: 'Session 1', exercises: [] };
+      state.routine.sessions.push(s);
+      state.ui.expandedSessionIds.push(s.id);
+      state.ui.activeTab = 'routine';
+      saveState();
+      render();
+      break;
+    }
     case 'toggle-set-done': {
       const ex = state.activeWorkoutDraft.exercises.find(x => x.exerciseId === exerciseId);
       ex.sets[setIndex].done = !ex.sets[setIndex].done;
       const nowDone = ex.sets[setIndex].done;
+      if (nowDone) justChecked = exerciseId + ':' + setIndex;
       saveState();
       if (nowDone) startRestTimer();
       render();
