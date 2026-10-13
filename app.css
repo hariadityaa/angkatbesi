@@ -326,3 +326,4 @@ label.field-label {
 .btn.block + .card { margin-top: var(--s-3); }
 .install-row { margin-top: var(--s-3); }
 .install-row > .btn { flex: 1 1 120px; white-space: nowrap; }
+.update-banner { border-color: var(--border-strong); }

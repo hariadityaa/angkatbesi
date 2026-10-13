@@ -1,7 +1,8 @@
-const CACHE_NAME = 'gym-companion-v5';
+const CACHE_NAME = 'gym-companion-v6';
 
 // The app shell — always fetched from the network first so updates show up
 // immediately when online. The cache is only the offline fallback.
+// GitHub Pages sends max-age=600, so revalidate instead of trusting the HTTP cache.
 const CORE_FILES = new Set(['', 'index.html', 'app.js', 'app.css', 'manifest.json']);
 
 const ALL_ASSETS = [
@@ -18,7 +19,7 @@ const ALL_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ALL_ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ALL_ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())
   );
 });
 
@@ -39,7 +40,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isCore) {
     event.respondWith(
-      fetch(event.request).then((response) => {
+      fetch(event.request, { cache: 'no-cache' }).then((response) => {
         if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
