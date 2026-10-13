@@ -379,6 +379,49 @@ function render() {
   }
 }
 
+// ---------- Install ----------
+// Chrome's menu install says "already installed" for any page on an origin that has an
+// installed app (other apps live on hariadityaa.github.io). The page prompt checks scope correctly.
+let installEvent = null;
+const INSTALL_DECLINED = 'heavyho.installDeclined';
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches;
+
+function installDeclined() {
+  try { return localStorage.getItem(INSTALL_DECLINED) === '1'; } catch { return false; }
+}
+
+function renderInstallCard() {
+  if (!installEvent || installDeclined() || isStandalone()) return '';
+  return `
+    <div class="card">
+      <h3>Put HeavyHo on your home screen</h3>
+      <p class="muted">Open it like any other app. It works without internet too.</p>
+      <div class="row install-row">
+        <button class="btn primary" data-action="install-app">Install app</button>
+        <button class="btn" data-action="install-decline">Not now</button>
+      </div>
+    </div>`;
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installEvent = e;
+  render();
+});
+window.addEventListener('appinstalled', () => { installEvent = null; render(); });
+
+async function handleInstall() {
+  const e = installEvent;
+  installEvent = null;
+  render();
+  if (e) await e.prompt().catch(() => {});
+}
+
+function handleDeclineInstall() {
+  try { localStorage.setItem(INSTALL_DECLINED, '1'); } catch { /* storage blocked */ }
+  render();
+}
+
 function renderTrainTab() {
   if (state.activeWorkoutDraft) return renderActiveWorkout(state.activeWorkoutDraft);
 
@@ -386,6 +429,7 @@ function renderTrainTab() {
   if (sessions.length === 0) {
     return `
       <div class="top-bar"><h1>Train</h1></div>
+      ${renderInstallCard()}
       <div class="empty-state">
         <p>No sessions set up yet.</p>
         <p>Go to the <strong>Routine</strong> tab to add your first session and exercises.</p>
@@ -394,6 +438,7 @@ function renderTrainTab() {
 
   return `
     <div class="top-bar"><h1>Train</h1></div>
+    ${renderInstallCard()}
     ${sessions.map(s => `
       <div class="card">
         <div class="card-header">
@@ -844,6 +889,12 @@ document.addEventListener('click', (e) => {
       break;
     case 'finish-workout':
       handleFinishWorkout();
+      break;
+    case 'install-app':
+      handleInstall();
+      break;
+    case 'install-decline':
+      handleDeclineInstall();
       break;
     case 'cancel-workout':
       handleCancelWorkout();

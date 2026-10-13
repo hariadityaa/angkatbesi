@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gym-companion-v4';
+const CACHE_NAME = 'gym-companion-v5';
 
 // The app shell — always fetched from the network first so updates show up
 // immediately when online. The cache is only the offline fallback.
@@ -12,6 +12,7 @@ const ALL_ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png'
 ];
 
