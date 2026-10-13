@@ -1,4 +1,4 @@
-/* HeavyHo — all data stored in this browser via localStorage. No server. */
+/* Iron Log — all data stored in this browser via localStorage. No server. */
 
 const STORAGE_KEY = 'gymCompanionData_v1';
 
@@ -394,7 +394,7 @@ function renderInstallCard() {
   if (!installEvent || installDeclined() || isStandalone()) return '';
   return `
     <div class="card">
-      <h3>Put HeavyHo on your home screen</h3>
+      <h3>Put Iron Log on your home screen</h3>
       <p class="muted">Open it like any other app. It works without internet too.</p>
       <div class="row install-row">
         <button class="btn primary" data-action="install-app">Install app</button>
@@ -778,7 +778,7 @@ function handleCancelWorkout() {
 
 function exportData() {
   const stamp = new Date().toISOString().slice(0, 10);
-  downloadJson(`gym-companion-backup-${stamp}.json`, state);
+  downloadJson(`iron-log-backup-${stamp}.json`, state);
 }
 
 function importDataFromFile(file) {
@@ -1043,7 +1043,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'download-sample-routine':
-      downloadJson('gym-companion-sample-routine.json', SAMPLE_ROUTINE);
+      downloadJson('iron-log-sample-routine.json', SAMPLE_ROUTINE);
       break;
     case 'copy-sample-routine': {
       const text = JSON.stringify(SAMPLE_ROUTINE, null, 2);
