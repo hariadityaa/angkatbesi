@@ -539,7 +539,7 @@ function renderUpdateBanner() {
 
 // ---------- Install ----------
 // Chrome's menu install says "already installed" for any page on an origin that has an
-// installed app (other apps live on hariadityaa.github.io). The page prompt checks scope correctly.
+// installed app (other apps live on hurrymeow.github.io). The page prompt checks scope correctly.
 let installEvent = null;
 const INSTALL_DECLINED = 'heavyho.installDeclined';
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches;
