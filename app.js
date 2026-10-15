@@ -843,7 +843,23 @@ function renderRoutineTab() {
     </div>
     ${r.sessions.map((s, sIdx) => renderSessionCard(s, sIdx, r.sessions.length)).join('')}
     <button class="btn primary block" data-action="add-session">+ Add Session</button>
+    ${renderShareRoutinePanel()}
     ${renderQuickStartPanel()}
+  `;
+}
+
+function renderShareRoutinePanel() {
+  if (!state.routine.sessions.some(s => s.exercises.length)) return '';
+  return `
+    <div class="card">
+      <h3>Share routine</h3>
+      <p class="muted">Exports sessions, exercises, sets and reps only. No weights or history. The other person pastes it into Quick start → Paste JSON.</p>
+      <div class="row mt-3">
+        ${navigator.share ? '<button class="btn small" data-action="share-routine">Share</button>' : ''}
+        <button class="btn small" data-action="copy-routine">Copy JSON</button>
+        <button class="btn small" data-action="download-routine">Download .json</button>
+      </div>
+    </div>
   `;
 }
 
@@ -1195,6 +1211,40 @@ function applyRoutineData(routineData, confirmMessage) {
   return true;
 }
 
+// Routine only, in the same shape the Paste JSON importer accepts. Excludes ids and workout history.
+function routineForSharing() {
+  return {
+    name: state.routine.name,
+    sessions: state.routine.sessions
+      .filter(s => s.exercises.length)
+      .map(s => ({
+        name: s.name,
+        exercises: s.exercises.map(e => ({
+          name: e.name,
+          sets: e.targetSets,
+          reps: /^\d+$/.test(e.targetReps) ? Number(e.targetReps) : e.targetReps,
+          ...(e.notes ? { notes: e.notes } : {})
+        }))
+      }))
+  };
+}
+
+function routineShareFilename() {
+  const slug = state.routine.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'routine';
+  return `iron-log-${slug}.json`;
+}
+
+function copyRoutineJson() {
+  const text = JSON.stringify(routineForSharing(), null, 2);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('Routine JSON copied.'))
+      .catch(() => alert('Could not copy — your browser blocked clipboard access.'));
+  } else {
+    alert('Clipboard access isn\'t available here — use Download .json instead.');
+  }
+}
+
 function importRoutineFromJsonText(text) {
   let parsed;
   try {
@@ -1422,6 +1472,16 @@ document.addEventListener('click', (e) => {
       }
       break;
     }
+    case 'share-routine':
+      navigator.share({ title: state.routine.name, text: JSON.stringify(routineForSharing(), null, 2) })
+        .catch(err => { if (err && err.name !== 'AbortError') copyRoutineJson(); });
+      break;
+    case 'copy-routine':
+      copyRoutineJson();
+      break;
+    case 'download-routine':
+      downloadJson(routineShareFilename(), routineForSharing());
+      break;
     case 'download-sample-routine':
       downloadJson('iron-log-sample-routine.json', SAMPLE_ROUTINE);
       break;
