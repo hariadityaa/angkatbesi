@@ -142,7 +142,6 @@ function defaultState() {
       expandedHistoryIds: [],
       historyViewMode: 'sessions',
       historyExerciseFilter: '',
-      quickStartOpen: false,
       quickStartMode: 'templates'
     }
   };
@@ -502,7 +501,14 @@ const ICONS = {
   up: '<path d="M12 19V5m-6 6 6-6 6 6"/>',
   down: '<path d="M12 5v14m-6-6 6 6 6-6"/>',
   chevDown: '<path d="m6 9 6 6 6-6"/>',
-  check: '<path d="M20 6 9 17l-5-5"/>'
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  pencil: '<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  reorder: '<path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'
 };
 function icon(name) {
   return '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
@@ -521,8 +527,14 @@ function render() {
     case 'settings': html = renderSettingsTab(); break;
     default: html = renderTrainTab();
   }
-  app.innerHTML = renderUpdateBanner() + html;
+  app.innerHTML = renderUpdateBanner() + html + renderSheet();
+  document.body.classList.toggle('sheet-open', !!sheet);
   justChecked = null;
+  if (sheet && sheet.focusName) {
+    sheet.focusName = false;
+    const el = document.getElementById('sheet-ex-name');
+    if (el) el.focus();
+  }
 }
 
 // ---------- Update banner ----------
@@ -834,58 +846,35 @@ function renderActiveWorkout(draft) {
 
 function renderRoutineTab() {
   const r = state.routine;
+  const empty = r.sessions.length === 0;
   return `
-    <div class="top-bar"><h1>Routine</h1></div>
-    <div class="card">
-      <label class="field-label">Routine name</label>
-      <input type="text" data-field="routine-name" value="${escapeHtml(r.name)}">
+    <div class="top-bar routine-head">
+      <input type="text" id="routine-name-input" class="title-input" data-field="routine-name"
+        value="${escapeHtml(r.name)}" placeholder="Routine name" aria-label="Routine name" enterkeyhint="done">
+      <label class="icon-btn" for="routine-name-input" aria-label="Rename routine">${icon('pencil')}</label>
+      ${routineReorder
+        ? '<button class="btn small primary" data-action="reorder-done">Done</button>'
+        : '<button class="icon-btn" data-action="open-routine-menu" aria-label="Routine options">' + icon('more') + '</button>'}
     </div>
+    ${routineReorder ? '<p class="muted reorder-hint">Use the arrows to reorder sessions and exercises.</p>' : ''}
+    ${empty ? renderQuickStartPanel() : ''}
     ${r.sessions.map((s, sIdx) => renderSessionCard(s, sIdx, r.sessions.length)).join('')}
-    <button class="btn primary block" data-action="add-session">+ Add Session</button>
-    ${renderShareRoutinePanel()}
-    ${renderQuickStartPanel()}
-  `;
-}
-
-function renderShareRoutinePanel() {
-  if (!state.routine.sessions.some(s => s.exercises.length)) return '';
-  return `
-    <div class="card">
-      <h3>Share routine</h3>
-      <p class="muted">Exports sessions, exercises, sets and reps only. No weights or history. The other person pastes it into Quick start → Paste JSON.</p>
-      <div class="row mt-3">
-        ${navigator.share ? '<button class="btn small" data-action="share-routine">Share</button>' : ''}
-        <button class="btn small" data-action="copy-routine">Copy JSON</button>
-        <button class="btn small" data-action="download-routine">Download .json</button>
-      </div>
-    </div>
+    ${routineReorder ? '' : '<button class="btn dashed block" data-action="add-session">+ Add session</button>'}
   `;
 }
 
 function renderQuickStartPanel() {
-  const open = state.ui.quickStartOpen;
   const mode = state.ui.quickStartMode || 'templates';
   return `
     <div class="card">
-      <button class="disclosure" data-action="toggle-quickstart" aria-expanded="${open}">
-        <span class="disclosure-text"><h3>Quick start</h3></span>
-        ${icon('chevDown')}
-      </button>
-      ${open ? `
-        <div class="tabs-toggle mt-3">
-          <button class="${mode === 'templates' ? 'active' : ''}" data-action="quickstart-tab" data-mode="templates">Templates</button>
-          <button class="${mode === 'json' ? 'active' : ''}" data-action="quickstart-tab" data-mode="json">Paste JSON</button>
-        </div>
-        ${mode === 'templates' ? renderTemplatesList() : renderImportJsonForm()}
-      ` : ''}
+      <h3>Quick start</h3>
+      <p class="muted">Pick a template or paste a routine someone shared with you.</p>
+      <div class="tabs-toggle mt-3">
+        <button class="${mode === 'templates' ? 'active' : ''}" data-action="quickstart-tab" data-mode="templates">Templates</button>
+        <button class="${mode === 'json' ? 'active' : ''}" data-action="quickstart-tab" data-mode="json">Paste JSON</button>
+      </div>
+      ${mode === 'templates' ? renderTemplateRows() : renderImportJsonForm()}
     </div>
-  `;
-}
-
-function renderTemplatesList() {
-  return `
-    <p class="muted">Adds that program's sessions to your routine — nothing existing is deleted.</p>
-    ${renderTemplateRows()}
   `;
 }
 
@@ -907,8 +896,8 @@ function renderTemplateRows() {
 
 function renderImportJsonForm() {
   return `
-    <p class="muted">Edit the sample below or paste your own — importing adds these sessions to your current routine without deleting anything.</p>
-    <textarea id="import-json-textarea" rows="9">${escapeHtml(JSON.stringify(SAMPLE_ROUTINE, null, 2))}</textarea>
+    <p class="muted">Edit the sample below or paste your own. Importing adds these sessions without deleting anything.</p>
+    <textarea id="import-json-textarea" class="mt-2" rows="9">${escapeHtml(JSON.stringify(SAMPLE_ROUTINE, null, 2))}</textarea>
     <button class="btn primary block mt-3" data-action="import-routine-json">Import</button>
     <div class="row mt-2">
       <button class="btn small ghost" data-action="copy-sample-routine">Copy sample</button>
@@ -917,9 +906,23 @@ function renderImportJsonForm() {
   `;
 }
 
+function sessionSetCount(s) {
+  return s.exercises.reduce((n, ex) => n + (Number(ex.targetSets) || 0), 0);
+}
+
+function sessionStats(s) {
+  const n = s.exercises.length;
+  if (!n) return 'No exercises yet';
+  const sets = sessionSetCount(s);
+  return `${n} exercise${n === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}`;
+}
+
 function sessionSummary(s) {
-  if (!s.exercises.length) return 'No exercises yet';
   return s.exercises.map(ex => ex.name || 'Untitled').join(' · ');
+}
+
+function exerciseTarget(ex) {
+  return `${ex.targetSets || '–'} × ${ex.targetReps || '–'}`;
 }
 
 function renderSessionCard(s, sIdx, total) {
@@ -930,49 +933,150 @@ function renderSessionCard(s, sIdx, total) {
         <button class="disclosure" data-action="toggle-session-expand" data-session-id="${s.id}" aria-expanded="${expanded}">
           <span class="disclosure-text">
             <h3 data-session-title="${s.id}">${escapeHtml(s.name) || 'Untitled session'}</h3>
-            <span class="muted">${escapeHtml(sessionSummary(s))}</span>
+            <span class="muted">${sessionStats(s)}</span>
+            ${!expanded && s.exercises.length ? `<span class="muted session-names">${escapeHtml(sessionSummary(s))}</span>` : ''}
           </span>
-          ${icon('chevDown')}
+          ${routineReorder ? '' : icon('chevDown')}
         </button>
-        <div class="reorder-btns">
-          <button class="icon-btn" data-action="move-session-up" data-session-id="${s.id}" ${sIdx === 0 ? 'disabled' : ''} aria-label="Move up">${icon('up')}</button>
-          <button class="icon-btn" data-action="move-session-down" data-session-id="${s.id}" ${sIdx === total - 1 ? 'disabled' : ''} aria-label="Move down">${icon('down')}</button>
-        </div>
+        ${routineReorder ? `
+          <div class="row reorder-inline">
+            <button class="icon-btn" data-action="move-session-up" data-session-id="${s.id}" ${sIdx === 0 ? 'disabled' : ''} aria-label="Move up">${icon('up')}</button>
+            <button class="icon-btn" data-action="move-session-down" data-session-id="${s.id}" ${sIdx === total - 1 ? 'disabled' : ''} aria-label="Move down">${icon('down')}</button>
+          </div>` : ''}
       </div>
       ${expanded ? `
         <hr class="divider">
-        <label class="field-label">Session name</label>
-        <input type="text" data-field="session-name" data-session-id="${s.id}" value="${escapeHtml(s.name)}">
-        <div class="mt-3">
+        <label class="field-label" for="session-name-${s.id}">Session name</label>
+        <input type="text" id="session-name-${s.id}" data-field="session-name" data-session-id="${s.id}" value="${escapeHtml(s.name)}">
+        <div class="ex-list mt-3">
         ${s.exercises.map((ex, eIdx) => `
-          <div class="exercise-row">
-            <div class="row wrap">
-              <input type="text" class="grow" style="min-width:128px;" placeholder="Exercise name"
-                data-field="exercise-name" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.name)}">
-              <div style="width:56px;">
-                <label class="field-label">Sets</label>
-                <input type="number" min="1" data-field="target-sets" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${ex.targetSets}">
-              </div>
-              <div style="width:72px;">
-                <label class="field-label">Reps</label>
-                <input type="text" inputmode="numeric" placeholder="e.g. 8-12" data-field="target-reps" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.targetReps)}">
-              </div>
-              <div class="reorder-btns">
-                <button class="icon-btn" data-action="move-exercise-up" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === 0 ? 'disabled' : ''}aria-label="Move up">${icon('up')}</button>
-                <button class="icon-btn" data-action="move-exercise-down" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === s.exercises.length - 1 ? 'disabled' : ''}aria-label="Move down">${icon('down')}</button>
-              </div>
-              <button class="icon-btn" data-action="delete-exercise" data-session-id="${s.id}" data-exercise-id="${ex.id}"aria-label="Delete">${icon('trash')}</button>
-            </div>
-            <input type="text" class="mt-2" placeholder="Notes (optional)"
-              data-field="exercise-notes" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.notes || '')}">
+          <div class="ex-line-wrap">
+            <button class="ex-line" data-action="edit-exercise" data-session-id="${s.id}" data-exercise-id="${ex.id}">
+              <span class="ex-line-text">
+                <span class="ex-line-name">${escapeHtml(ex.name) || '<span class="muted">Untitled</span>'}</span>
+                ${ex.notes ? `<span class="muted ex-line-notes">${escapeHtml(ex.notes)}</span>` : ''}
+              </span>
+              <span class="ex-line-target">${escapeHtml(exerciseTarget(ex))}</span>
+            </button>
+            ${routineReorder ? `
+              <div class="row reorder-inline">
+                <button class="icon-btn" data-action="move-exercise-up" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === 0 ? 'disabled' : ''} aria-label="Move up">${icon('up')}</button>
+                <button class="icon-btn" data-action="move-exercise-down" data-session-id="${s.id}" data-exercise-id="${ex.id}" ${eIdx === s.exercises.length - 1 ? 'disabled' : ''} aria-label="Move down">${icon('down')}</button>
+              </div>` : ''}
           </div>
         `).join('')}
         </div>
+        ${routineReorder ? '' : `
         <div class="row between mt-3">
-          <button class="btn small" data-action="add-exercise" data-session-id="${s.id}">+ Add Exercise</button>
+          <button class="btn small" data-action="add-exercise" data-session-id="${s.id}">+ Add exercise</button>
           <button class="btn small ghost danger-text" data-action="delete-session" data-session-id="${s.id}">${icon('trash')} Delete session</button>
-        </div>
+        </div>`}
       ` : ''}
+    </div>
+  `;
+}
+
+// ---------- Bottom sheet ----------
+// One sheet at a time. Opening pushes a history entry so Android back closes it.
+let sheet = null;          // { kind: 'menu' | 'templates' | 'import' | 'exercise', sessionId, exerciseId, isNew }
+let sheetAnimate = false;  // slide in only on first open, not on re-renders
+let routineReorder = false;
+
+function openSheet(next) {
+  if (!sheet) {
+    sheetAnimate = true;
+    history.pushState({ sheet: true }, '');
+  }
+  sheet = next;
+  render();
+}
+
+function closeSheet() {
+  if (!sheet) return;
+  if (history.state && history.state.sheet) history.back(); // popstate finishes the close
+  else dismissSheet();
+}
+
+function dismissSheet() {
+  if (!sheet) return;
+  if (sheet.kind === 'exercise' && sheet.isNew) {
+    const s = findSession(sheet.sessionId);
+    const ex = s && s.exercises.find(x => x.id === sheet.exerciseId);
+    if (ex && !ex.name.trim()) {
+      s.exercises = s.exercises.filter(x => x !== ex);
+      saveState();
+    }
+  }
+  sheet = null;
+  render();
+}
+
+window.addEventListener('popstate', () => { if (sheet) dismissSheet(); });
+
+function renderSheet() {
+  if (!sheet) return '';
+  let body = '';
+  switch (sheet.kind) {
+    case 'menu': body = renderRoutineMenu(); break;
+    case 'templates': body = `<h2>Add from template</h2><p class="muted">Adds that program's sessions. Nothing existing is deleted.</p><div class="mt-3">${renderTemplateRows()}</div>`; break;
+    case 'import': body = `<h2>Import JSON</h2>${renderImportJsonForm()}`; break;
+    case 'exercise': body = renderExerciseSheet(); break;
+  }
+  const anim = sheetAnimate ? ' sheet-enter' : '';
+  sheetAnimate = false;
+  return `
+    <div class="sheet-backdrop${anim}" data-action="close-sheet"></div>
+    <div class="sheet${anim}" role="dialog" aria-modal="true">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      ${body}
+    </div>
+  `;
+}
+
+function sheetItem(action, iconName, label, sub) {
+  return `
+    <button class="sheet-item" data-action="${action}">
+      ${icon(iconName)}
+      <span class="disclosure-text"><span>${label}</span>${sub ? `<span class="muted">${sub}</span>` : ''}</span>
+    </button>
+  `;
+}
+
+function renderRoutineMenu() {
+  const hasExercises = state.routine.sessions.some(s => s.exercises.length);
+  return `
+    ${state.routine.sessions.length ? sheetItem('reorder-start', 'reorder', 'Reorder') : ''}
+    ${hasExercises ? sheetItem('share-routine', 'share', 'Share routine', 'Sessions, exercises, sets and reps. No weights or history.') : ''}
+    ${hasExercises ? sheetItem('download-routine', 'download', 'Download .json') : ''}
+    ${sheetItem('open-templates', 'grid', 'Add from template')}
+    ${sheetItem('open-import', 'clipboard', 'Import JSON')}
+  `;
+}
+
+function renderExerciseSheet() {
+  const s = findSession(sheet.sessionId);
+  const ex = s && s.exercises.find(x => x.id === sheet.exerciseId);
+  if (!ex) return '';
+  const ids = `data-session-id="${s.id}" data-exercise-id="${ex.id}"`;
+  return `
+    <h2>${sheet.isNew ? 'New exercise' : 'Edit exercise'}</h2>
+    <label class="field-label mt-3" for="sheet-ex-name">Name</label>
+    <input type="text" id="sheet-ex-name" placeholder="e.g. Squat" data-field="exercise-name" ${ids} value="${escapeHtml(ex.name)}">
+    <div class="row mt-3">
+      <div class="grow">
+        <label class="field-label" for="sheet-ex-sets">Sets</label>
+        <input type="number" id="sheet-ex-sets" min="1" inputmode="numeric" data-field="target-sets" ${ids} value="${ex.targetSets}">
+      </div>
+      <div class="grow">
+        <label class="field-label" for="sheet-ex-reps">Reps</label>
+        <input type="text" id="sheet-ex-reps" inputmode="numeric" placeholder="e.g. 8-12" data-field="target-reps" ${ids} value="${escapeHtml(ex.targetReps)}">
+      </div>
+    </div>
+    <label class="field-label mt-3" for="sheet-ex-notes">Notes</label>
+    <input type="text" id="sheet-ex-notes" placeholder="Optional" data-field="exercise-notes" ${ids} value="${escapeHtml(ex.notes || '')}">
+    <div class="row between mt-4">
+      <button class="btn ghost danger-text" data-action="delete-exercise" ${ids}>${icon('trash')} Delete</button>
+      <button class="btn primary" data-action="close-sheet">Done</button>
     </div>
   `;
 }
@@ -1298,6 +1402,8 @@ document.addEventListener('click', (e) => {
   if (tabBtn) {
     state.ui.activeTab = tabBtn.dataset.tab;
     finishSummary = null;
+    routineReorder = false;
+    if (sheet) closeSheet();
     saveState();
     render();
     return;
@@ -1417,18 +1523,44 @@ document.addEventListener('click', (e) => {
     }
     case 'add-exercise': {
       const s = findSession(sessionId);
-      s.exercises.push({ id: uid(), name: '', targetSets: 3, targetReps: '10', notes: '' });
+      const ex = { id: uid(), name: '', targetSets: 3, targetReps: '10', notes: '' };
+      s.exercises.push(ex);
       saveState();
-      render();
+      openSheet({ kind: 'exercise', sessionId, exerciseId: ex.id, isNew: true, focusName: true });
       break;
     }
+    case 'edit-exercise':
+      openSheet({ kind: 'exercise', sessionId, exerciseId });
+      break;
     case 'delete-exercise': {
       const s = findSession(sessionId);
       s.exercises = s.exercises.filter(ex => ex.id !== exerciseId);
       saveState();
-      render();
+      if (sheet) closeSheet();
+      else render();
       break;
     }
+    case 'close-sheet':
+      closeSheet();
+      break;
+    case 'open-routine-menu':
+      openSheet({ kind: 'menu' });
+      break;
+    case 'open-templates':
+      openSheet({ kind: 'templates' });
+      break;
+    case 'open-import':
+      openSheet({ kind: 'import' });
+      break;
+    case 'reorder-start':
+      routineReorder = true;
+      closeSheet();
+      render();
+      break;
+    case 'reorder-done':
+      routineReorder = false;
+      render();
+      break;
     case 'move-exercise-up':
     case 'move-exercise-down': {
       const s = findSession(sessionId);
@@ -1472,11 +1604,6 @@ document.addEventListener('click', (e) => {
     case 'clear-all-data':
       clearAllData();
       break;
-    case 'toggle-quickstart':
-      state.ui.quickStartOpen = !state.ui.quickStartOpen;
-      saveState();
-      render();
-      break;
     case 'quickstart-tab':
       state.ui.quickStartMode = target.dataset.mode;
       saveState();
@@ -1485,20 +1612,23 @@ document.addEventListener('click', (e) => {
     case 'import-routine-json': {
       const text = document.getElementById('import-json-textarea').value;
       if (importRoutineFromJsonText(text)) {
-        state.ui.quickStartOpen = false;
+        if (sheet) closeSheet();
         render();
         showToast('Routine imported.');
       }
       break;
     }
     case 'share-routine':
-      navigator.share({ title: state.routine.name, text: JSON.stringify(routineForSharing(), null, 2) })
-        .catch(err => { if (err && err.name !== 'AbortError') copyRoutineJson(); });
-      break;
-    case 'copy-routine':
-      copyRoutineJson();
+      closeSheet();
+      if (navigator.share) {
+        navigator.share({ title: state.routine.name, text: JSON.stringify(routineForSharing(), null, 2) })
+          .catch(err => { if (err && err.name !== 'AbortError') copyRoutineJson(); });
+      } else {
+        copyRoutineJson();
+      }
       break;
     case 'download-routine':
+      closeSheet();
       downloadJson(routineShareFilename(), routineForSharing());
       break;
     case 'download-sample-routine':
@@ -1520,6 +1650,7 @@ document.addEventListener('click', (e) => {
       if (!tpl) break;
       const msg = `Add "${tpl.label}" (${tpl.data.sessions.length} sessions) to your routine? Existing sessions are kept.`;
       if (applyRoutineData(tpl.data, msg)) {
+        if (sheet) closeSheet();
         render();
         showToast(`${tpl.label} added.`);
       }
@@ -1599,6 +1730,11 @@ document.addEventListener('input', (e) => {
   }
 });
 
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && sheet) closeSheet();
+  else if (e.key === 'Enter' && e.target.classList.contains('title-input')) e.target.blur();
+});
+
 // Changes that should trigger a full re-render (blur/change rather than every keystroke)
 document.addEventListener('change', (e) => {
   if (e.target.id === 'exercise-filter') {
@@ -1613,6 +1749,8 @@ document.addEventListener('change', (e) => {
     return;
   }
   const field = e.target.dataset.field;
+  // The exercise sheet stays open while editing. The list behind it re-renders on close.
+  if (sheet && sheet.kind === 'exercise') return;
   if (field === 'target-sets' || field === 'target-reps' || field === 'unit' || field === 'rest-seconds' ||
       field === 'session-name' || field === 'exercise-name' || field === 'routine-name' || field === 'exercise-notes') {
     render();
