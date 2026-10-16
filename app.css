@@ -82,6 +82,20 @@ p { margin: var(--s-1) 0; }
 .mt-3 { margin-top: var(--s-3); }
 .clickable { cursor: pointer; }
 
+/* Accordion header: whole row toggles, chevron points down and flips when open */
+.disclosure {
+  display: flex; align-items: center; gap: var(--s-2);
+  flex: 1; width: 100%; min-width: 0; min-height: 40px;
+  background: none; border: none; padding: 0; margin: 0;
+  color: inherit; font: inherit; text-align: left;
+}
+.disclosure-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.disclosure-text .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.disclosure > .icon { color: var(--text-2); transition: transform var(--ease); }
+.disclosure[aria-expanded="true"] > .icon { transform: rotate(180deg); }
+.disclosure:focus-visible { outline: 2px solid var(--text-2); outline-offset: 4px; border-radius: var(--radius-sm); }
+.btn.ghost.danger-text { color: var(--danger); }
+
 button { font-family: inherit; cursor: pointer; }
 
 .icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
@@ -255,7 +269,6 @@ label.field-label {
 
 .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-4); }
 
-.history-entry-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
 .history-detail { margin-top: var(--s-3); }
 
 .divider { height: 1px; background: var(--border); margin: var(--s-4) 0; border: none; }

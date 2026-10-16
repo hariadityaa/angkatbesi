@@ -499,10 +499,9 @@ function renderRestBanner() {
 // Lucide-style outline icons (1.5px stroke, inherits currentColor)
 const ICONS = {
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>',
-  up: '<path d="m6 15 6-6 6 6"/>',
-  down: '<path d="m6 9 6 6 6-6"/>',
+  up: '<path d="M12 19V5m-6 6 6-6 6 6"/>',
+  down: '<path d="M12 5v14m-6-6 6 6 6-6"/>',
   chevDown: '<path d="m6 9 6 6 6-6"/>',
-  chevRight: '<path d="m9 6 6 6-6 6"/>',
   check: '<path d="M20 6 9 17l-5-5"/>'
 };
 function icon(name) {
@@ -868,10 +867,10 @@ function renderQuickStartPanel() {
   const mode = state.ui.quickStartMode || 'templates';
   return `
     <div class="card">
-      <div data-action="toggle-quickstart" class="row between clickable">
-        <h3>Quick start</h3>
-        <span class="icon-btn">${icon(open ? 'chevDown' : 'chevRight')}</span>
-      </div>
+      <button class="disclosure" data-action="toggle-quickstart" aria-expanded="${open}">
+        <span class="disclosure-text"><h3>Quick start</h3></span>
+        ${icon('chevDown')}
+      </button>
       ${open ? `
         <div class="tabs-toggle mt-3">
           <button class="${mode === 'templates' ? 'active' : ''}" data-action="quickstart-tab" data-mode="templates">Templates</button>
@@ -918,21 +917,33 @@ function renderImportJsonForm() {
   `;
 }
 
+function sessionSummary(s) {
+  if (!s.exercises.length) return 'No exercises yet';
+  return s.exercises.map(ex => ex.name || 'Untitled').join(' · ');
+}
+
 function renderSessionCard(s, sIdx, total) {
   const expanded = state.ui.expandedSessionIds.includes(s.id);
   return `
     <div class="card">
-      <div class="row between">
-        <input type="text" class="grow" data-field="session-name" data-session-id="${s.id}" value="${escapeHtml(s.name)}">
+      <div class="row">
+        <button class="disclosure" data-action="toggle-session-expand" data-session-id="${s.id}" aria-expanded="${expanded}">
+          <span class="disclosure-text">
+            <h3 data-session-title="${s.id}">${escapeHtml(s.name) || 'Untitled session'}</h3>
+            <span class="muted">${escapeHtml(sessionSummary(s))}</span>
+          </span>
+          ${icon('chevDown')}
+        </button>
         <div class="reorder-btns">
-          <button class="icon-btn" data-action="move-session-up" data-session-id="${s.id}" ${sIdx === 0 ? 'disabled' : ''}aria-label="Move up">${icon('up')}</button>
-          <button class="icon-btn" data-action="move-session-down" data-session-id="${s.id}" ${sIdx === total - 1 ? 'disabled' : ''}aria-label="Move down">${icon('down')}</button>
+          <button class="icon-btn" data-action="move-session-up" data-session-id="${s.id}" ${sIdx === 0 ? 'disabled' : ''} aria-label="Move up">${icon('up')}</button>
+          <button class="icon-btn" data-action="move-session-down" data-session-id="${s.id}" ${sIdx === total - 1 ? 'disabled' : ''} aria-label="Move down">${icon('down')}</button>
         </div>
-        <button class="icon-btn" data-action="toggle-session-expand" data-session-id="${s.id}">${icon(expanded ? 'chevDown' : 'chevRight')}</button>
-        <button class="icon-btn" data-action="delete-session" data-session-id="${s.id}"aria-label="Delete">${icon('trash')}</button>
       </div>
       ${expanded ? `
         <hr class="divider">
+        <label class="field-label">Session name</label>
+        <input type="text" data-field="session-name" data-session-id="${s.id}" value="${escapeHtml(s.name)}">
+        <div class="mt-3">
         ${s.exercises.map((ex, eIdx) => `
           <div class="exercise-row">
             <div class="row wrap">
@@ -956,8 +967,12 @@ function renderSessionCard(s, sIdx, total) {
               data-field="exercise-notes" data-session-id="${s.id}" data-exercise-id="${ex.id}" value="${escapeHtml(ex.notes || '')}">
           </div>
         `).join('')}
-        <button class="btn small mt-3" data-action="add-exercise" data-session-id="${s.id}">+ Add Exercise</button>
-      ` : `<p class="muted">${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'}</p>`}
+        </div>
+        <div class="row between mt-3">
+          <button class="btn small" data-action="add-exercise" data-session-id="${s.id}">+ Add Exercise</button>
+          <button class="btn small ghost danger-text" data-action="delete-session" data-session-id="${s.id}">${icon('trash')} Delete session</button>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -1024,19 +1039,22 @@ function renderHistoryTab() {
       const { done } = entrySetCounts(entry);
       return `
       <div class="card">
-        <div class="history-entry-header" data-action="toggle-history-expand" data-entry-id="${entry.id}">
-          <div>
+        <button class="disclosure" data-action="toggle-history-expand" data-entry-id="${entry.id}" aria-expanded="${expanded}">
+          <span class="disclosure-text">
             <h3>${escapeHtml(entry.sessionName)}</h3>
-            <p class="muted">${formatDate(entry.date)}</p>
-            <p class="muted mono">${formatVolume(entryVolume(entry))} ${unitLabel()} · ${done} sets${prCount ? ` · <span class="up">${prCount} PR${prCount === 1 ? '' : 's'}</span>` : ''}</p>
-          </div>
-          <button class="icon-btn" data-action="delete-history-entry" data-entry-id="${entry.id}"aria-label="Delete">${icon('trash')}</button>
-        </div>
+            <span class="muted">${formatDate(entry.date)}</span>
+            <span class="muted mono">${formatVolume(entryVolume(entry))} ${unitLabel()} volume · ${done} sets${prCount ? ` · <span class="up">${prCount} PR${prCount === 1 ? '' : 's'}</span>` : ''}</span>
+          </span>
+          ${icon('chevDown')}
+        </button>
         ${expanded ? `
           <div class="history-detail">
             ${entry.exercises.map(ex => `
               <p><strong>${escapeHtml(ex.name)}:</strong> ${ex.sets.map(s => `${escapeHtml(s.reps)}${s.weight != null && s.weight !== '' ? '@' + escapeHtml(s.weight) + unitLabel() : ''}${s.completed ? '' : ' (skipped)'}`).join(', ')}</p>
             `).join('')}
+            <div class="row mt-3">
+              <button class="btn small ghost danger-text" data-action="delete-history-entry" data-entry-id="${entry.id}">${icon('trash')} Delete entry</button>
+            </div>
           </div>
         ` : ''}
       </div>
@@ -1206,6 +1224,7 @@ function applyRoutineData(routineData, confirmMessage) {
   const msg = confirmMessage || `Import ${newSessions.length} session(s) into your routine? Existing sessions are kept.`;
   if (!wasEmpty && !confirm(msg)) return false;
   state.routine.sessions.push(...newSessions);
+  state.ui.expandedSessionIds.push(...newSessions.map(s => s.id));
   if (wasEmpty && routineData.name) state.routine.name = String(routineData.name);
   saveState();
   return true;
@@ -1524,6 +1543,8 @@ document.addEventListener('input', (e) => {
     case 'session-name': {
       const s = findSession(sessionId);
       s.name = e.target.value;
+      const title = document.querySelector(`[data-session-title="${sessionId}"]`);
+      if (title) title.textContent = s.name || 'Untitled session';
       saveState();
       break;
     }
