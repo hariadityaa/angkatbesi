@@ -522,7 +522,7 @@ const ICONS = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
-  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+  gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   back: '<path d="m15 18-6-6 6-6"/>',
   clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'
 };
@@ -647,7 +647,7 @@ function renderTrainTab() {
   if (!next) {
     if (sessions.length) {
       return `
-        <div class="top-bar"><h1>Train</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
+        <div class="top-bar"><h1>Train</h1><button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
         ${renderInstallCard()}
         <div class="empty-state">
           <p>Your sessions have no exercises yet.</p>
@@ -655,7 +655,7 @@ function renderTrainTab() {
         </div>`;
     }
     return `
-      <div class="top-bar"><h1>Train</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
+      <div class="top-bar"><h1>Train</h1><button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
       ${renderInstallCard()}
       <div class="card hero">
         <p class="eyebrow">Get started</p>
@@ -673,7 +673,7 @@ function renderTrainTab() {
         <h1>Train</h1>
         <p class="muted">${greeting()}. ${escapeHtml(next.name)} is up.</p>
       </div>
-      <button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button>
+      <button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button>
     </div>
     ${renderInstallCard()}
     ${renderWeekCard()}
@@ -1171,7 +1171,7 @@ function renderHistoryTab() {
   `;
 
   if (state.history.length === 0) {
-    return `<div class="top-bar"><h1>History</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>${toggle}<div class="empty-state"><p>No sessions logged yet.</p><p>Finish a workout from the Train tab and it'll show up here.</p></div>`;
+    return `<div class="top-bar"><h1>History</h1><button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>${toggle}<div class="empty-state"><p>No sessions logged yet.</p><p>Finish a workout from the Train tab and it'll show up here.</p></div>`;
   }
 
   if (mode === 'exercise') {
@@ -1187,7 +1187,7 @@ function renderHistoryTab() {
     }
     const tops = rows.map(r => r.top).filter(t => t != null);
     return `
-      <div class="top-bar"><h1>History</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
+      <div class="top-bar"><h1>History</h1><button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
       ${toggle}
       <div class="card">
         <label class="field-label">Exercise</label>
@@ -1215,7 +1215,7 @@ function renderHistoryTab() {
 
   const prs = prsByEntry();
   return `
-    <div class="top-bar"><h1>History</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
+    <div class="top-bar"><h1>History</h1><button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
     ${toggle}
     ${state.history.map(entry => {
       const expanded = state.ui.expandedHistoryIds.includes(entry.id);

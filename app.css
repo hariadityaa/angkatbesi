@@ -539,3 +539,5 @@ body.sheet-open { overflow: hidden; }
 .set-pair .btn { flex: 1; }
 .set-note { font-size: var(--text-xs); color: var(--text-3); margin: var(--s-2) var(--s-1) 0; }
 .set-link { font-size: var(--text-sm); color: var(--text-2); }
+.gear-btn { color: var(--text); min-width: 44px; min-height: 44px; margin-right: calc(-1 * var(--s-2)); }
+.gear-btn .icon { width: 24px; height: 24px; stroke-width: 1.75; }
