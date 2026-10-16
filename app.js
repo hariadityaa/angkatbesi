@@ -635,6 +635,7 @@ function handleDeclineInstall() {
   render();
 }
 
+let settingsFrom = 'train'; // tab the gear was tapped on, so Back returns there
 let finishSummary = null; // { entryId } of the session just finished, until dismissed
 
 function renderTrainTab() {
@@ -1170,7 +1171,7 @@ function renderHistoryTab() {
   `;
 
   if (state.history.length === 0) {
-    return `<div class="top-bar"><h1>History</h1></div>${toggle}<div class="empty-state"><p>No sessions logged yet.</p><p>Finish a workout from the Train tab and it'll show up here.</p></div>`;
+    return `<div class="top-bar"><h1>History</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>${toggle}<div class="empty-state"><p>No sessions logged yet.</p><p>Finish a workout from the Train tab and it'll show up here.</p></div>`;
   }
 
   if (mode === 'exercise') {
@@ -1186,7 +1187,7 @@ function renderHistoryTab() {
     }
     const tops = rows.map(r => r.top).filter(t => t != null);
     return `
-      <div class="top-bar"><h1>History</h1></div>
+      <div class="top-bar"><h1>History</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
       ${toggle}
       <div class="card">
         <label class="field-label">Exercise</label>
@@ -1214,7 +1215,7 @@ function renderHistoryTab() {
 
   const prs = prsByEntry();
   return `
-    <div class="top-bar"><h1>History</h1></div>
+    <div class="top-bar"><h1>History</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
     ${toggle}
     ${state.history.map(entry => {
       const expanded = state.ui.expandedHistoryIds.includes(entry.id);
@@ -2006,7 +2007,8 @@ document.addEventListener('click', (e) => {
       break;
     case 'open-settings':
     case 'close-settings':
-      state.ui.activeTab = action === 'open-settings' ? 'settings' : 'train';
+      if (action === 'open-settings') settingsFrom = state.ui.activeTab;
+      state.ui.activeTab = action === 'open-settings' ? 'settings' : settingsFrom;
       saveState();
       render();
       window.scrollTo(0, 0);
