@@ -1848,9 +1848,44 @@ async function connectHealth() {
   render();
 }
 
+let healthCheck = null; // { entryId, text } from the latest "Check in Google Health"
+
+async function checkInHealth(entryId) {
+  const entry = state.history.find(h => h.id === entryId);
+  if (!entry) return;
+  healthCheck = { entryId, text: 'Asking Google…' };
+  render();
+  try {
+    if (!Health.validToken()) await Health.getToken();
+    const points = await Health.check(entry);
+    const start = Date.parse(entry.startedAt || entry.date);
+    const mine = points.find(p => p.name === entry.gh?.name)
+      || points.find(p => Math.abs(Date.parse(p.exercise?.interval?.startTime) - start) < 1000);
+    if (mine) {
+      if (!entry.gh?.name) { entry.gh = { state: 'done', name: mine.name }; saveState(); }
+      const ex = mine.exercise || {};
+      healthCheck = { entryId, text: `Google has it: ${ex.exerciseType || '?'}, ${ex.metricsSummary?.caloriesKcal ?? '?'} kcal, ${formatDate(ex.interval?.startTime)}. Look under Health → Exercise for that day.` };
+    } else {
+      healthCheck = { entryId, text: `Google has no session at this time (${points.length} other${points.length === 1 ? '' : 's'} nearby). Tap Resend.`, missing: true };
+    }
+  } catch (e) {
+    healthCheck = { entryId, text: `Check failed: ${e.message}` };
+  }
+  render();
+}
+
 function healthStateLine(entry) {
   if (!Health.isConnected() || !entry.gh) return '';
-  if (entry.gh.state === 'done') return `<p class="muted">${icon('check')} Sent to Google Health</p>`;
+  if (entry.gh.state === 'done') {
+    const chk = healthCheck?.entryId === entry.id ? healthCheck : null;
+    return `
+      <p class="muted">${icon('check')} Sent to Google Health</p>
+      ${chk ? `<p class="muted mt-2">${escapeHtml(chk.text)}</p>` : ''}
+      <div class="row wrap mt-2">
+        <button class="btn small" data-action="health-check" data-entry-id="${entry.id}">Check in Google Health</button>
+        ${chk?.missing ? `<button class="btn small" data-action="health-resend" data-entry-id="${entry.id}">Resend</button>` : ''}
+      </div>`;
+  }
   if (healthStatus.busy) return '<p class="muted">Sending to Google Health…</p>';
   const why = entry.gh.state === 'failed' ? `Google rejected it: ${escapeHtml(entry.gh.error || 'unknown error')}`
     : healthStatus.error ? `Not sent yet: ${escapeHtml(healthStatus.error)}` : 'Not sent yet.';
@@ -2201,6 +2236,18 @@ document.addEventListener('click', (e) => {
     case 'health-send':
       sendToHealth({ interactive: true });
       break;
+    case 'health-check':
+      checkInHealth(target.dataset.entryId);
+      break;
+    case 'health-resend': {
+      const entry = state.history.find(h => h.id === target.dataset.entryId);
+      if (!entry) break;
+      entry.gh = { state: 'pending' };
+      healthCheck = null;
+      saveState();
+      sendToHealth({ interactive: true });
+      break;
+    }
     case 'health-send-past': {
       const list = Health.unsent(state.history);
       if (!list.length) { showToast('Nothing to send.'); break; }

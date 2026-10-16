@@ -209,5 +209,24 @@ const Health = (() => {
     }
   }
 
-  return { estimate, toDataPoint, isConnected, validToken, unsent, waitingCount, queueDelete, preload, getToken, disconnect, sync };
+  // Asks Google which exercise sessions it holds within 12 h of this workout's start.
+  // Returns the matching data points (Google only lists ones this app may see).
+  async function check(entry) {
+    const token = validToken();
+    if (!token) throw new AuthError('Google sign-in expired');
+    const at = Date.parse(entry.startedAt || entry.date);
+    const from = new Date(at - 12 * 3600000).toISOString();
+    const until = new Date(at + 12 * 3600000).toISOString();
+    const filter = `exercise.interval.start_time >= "${from}" AND exercise.interval.start_time < "${until}"`;
+    let data;
+    try {
+      data = await call(token, 'GET', `${API}?pageSize=50&filter=${encodeURIComponent(filter)}`);
+    } catch (e) {
+      if (!permanent(e)) throw e;
+      data = await call(token, 'GET', `${API}?pageSize=50`); // Filter refused: scan recent sessions.
+    }
+    return data.dataPoints || [];
+  }
+
+  return { estimate, toDataPoint, isConnected, check, validToken, unsent, waitingCount, queueDelete, preload, getToken, disconnect, sync };
 })();
