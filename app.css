@@ -497,3 +497,10 @@ body.sheet-open { overflow: hidden; }
 .sheet-enter.sheet-backdrop { animation: fade-in 200ms ease-out; }
 @keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Optional per-exercise progression (exercise sheet) */
+.progression > summary { list-style: none; cursor: pointer; }
+.progression > summary::-webkit-details-marker { display: none; }
+.progression[open] > summary > .icon { transform: rotate(180deg); }
+.lift-target .goal { font-size: var(--text-xs); white-space: nowrap; }
+.lift-target .goal .icon { width: 12px; height: 12px; stroke-width: 2.5; vertical-align: -1px; }
