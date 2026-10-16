@@ -130,6 +130,7 @@ function defaultState() {
     version: 1,
     unit: 'kg',
     restSeconds: 90,
+    bodyweight: '',
     routine: {
       name: 'My Routine',
       sessions: []
@@ -804,6 +805,7 @@ function renderFinishSummary() {
       <div class="stat"><span class="stat-value">${formatVolume(entryVolume(entry))}</span><span class="stat-label">${unitLabel()} lifted</span></div>
       <div class="stat"><span class="stat-value">${done}/${total}</span><span class="stat-label">sets done</span></div>
     </div>
+    ${renderHealthSummary(entry)}
     <div class="card">
       ${prs.length ? `
         <p class="eyebrow">New personal bests</p>
@@ -1227,7 +1229,7 @@ function renderHistoryTab() {
           <span class="disclosure-text">
             <h3>${escapeHtml(entry.sessionName)}</h3>
             <span class="muted">${formatDate(entry.date)}</span>
-            <span class="muted mono">${formatVolume(entryVolume(entry))} ${unitLabel()} volume · ${done} sets${prCount ? ` · <span class="up">${prCount} PR${prCount === 1 ? '' : 's'}</span>` : ''}</span>
+            <span class="muted mono">${formatVolume(entryVolume(entry))} ${unitLabel()} volume · ${done} sets${kcalText(entry)}${prCount ? ` · <span class="up">${prCount} PR${prCount === 1 ? '' : 's'}</span>` : ''}</span>
           </span>
           ${icon('chevDown')}
         </button>
@@ -1236,6 +1238,7 @@ function renderHistoryTab() {
             ${entry.exercises.map(ex => `
               <p><strong>${escapeHtml(ex.name)}:</strong> ${ex.sets.map(s => `${escapeHtml(s.reps)}${s.weight != null && s.weight !== '' ? '@' + escapeHtml(s.weight) + unitLabel() : ''}${s.completed ? '' : ' (skipped)'}`).join(', ')}</p>
             `).join('')}
+            ${renderHealthEntryStatus(entry)}
             <div class="row mt-3">
               <button class="btn small ghost danger-text" data-action="delete-history-entry" data-entry-id="${entry.id}">${icon('trash')} Delete entry</button>
             </div>
@@ -1253,6 +1256,7 @@ function renderSettingsTab() {
     ${renderInstallSettings()}
     ${renderShareSettings()}
     ${renderAiSettings()}
+    ${renderHealthSettings()}
     <div class="card">
       <label class="field-label">Weight unit label</label>
       <input type="text" data-field="unit" value="${escapeHtml(state.unit)}" maxlength="6">
@@ -1336,6 +1340,7 @@ function handleFinishWorkout() {
       }))
     }))
   };
+  if (Health.isConnected()) entry.gh = { state: 'pending' };
   state.history.unshift(entry);
   state.activeWorkoutDraft = null;
   saveState();
@@ -1343,6 +1348,7 @@ function handleFinishWorkout() {
   if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
   render();
   window.scrollTo(0, 0);
+  if (entry.gh) sendToHealth({ interactive: true });
 }
 
 function handleCancelWorkout() {
@@ -1798,6 +1804,101 @@ function renderAiSheet() {
   `;
 }
 
+// ---------- Google Health ----------
+// The browser talks to Google Health directly. See health.js and the README.
+
+let healthStatus = {}; // { busy, needsSignIn, error } for the latest send
+
+function entryEstimate(entry) {
+  return Health.estimate(entry, state.bodyweight, state.unit);
+}
+
+function kcalText(entry) {
+  const est = entryEstimate(entry);
+  return est ? ` · ~${est.kcal} kcal` : '';
+}
+
+// Tap handlers call this directly, so a needed sign-in popup is not blocked.
+async function sendToHealth({ interactive = false } = {}) {
+  if (!Health.isConnected() || healthStatus.busy) return;
+  healthStatus = { busy: true };
+  render();
+  try {
+    if (!Health.validToken()) {
+      if (!interactive) { healthStatus = { needsSignIn: true }; return; }
+      await Health.getToken();
+    }
+    healthStatus = await Health.sync({ entries: state.history, weight: state.bodyweight, unit: state.unit, save: saveState });
+  } catch (e) {
+    healthStatus = { needsSignIn: true, error: e.message };
+  } finally {
+    healthStatus.busy = false;
+    if (healthStatus.needsSignIn && !healthStatus.error && interactive) healthStatus.error = 'Google sign-in expired';
+    render();
+  }
+}
+
+async function connectHealth() {
+  try {
+    await Health.getToken();
+    showToast('Connected to Google Health.');
+  } catch (e) {
+    showToast(e.message);
+  }
+  render();
+}
+
+function healthStateLine(entry) {
+  if (!Health.isConnected() || !entry.gh) return '';
+  if (entry.gh.state === 'done') return `<p class="muted">${icon('check')} Sent to Google Health</p>`;
+  if (healthStatus.busy) return '<p class="muted">Sending to Google Health…</p>';
+  const why = entry.gh.state === 'failed' ? `Google rejected it: ${escapeHtml(entry.gh.error || 'unknown error')}`
+    : healthStatus.error ? `Not sent yet: ${escapeHtml(healthStatus.error)}` : 'Not sent yet.';
+  return `
+    <p class="muted">${why}</p>
+    <button class="btn small mt-2" data-action="health-send">Send to Google Health</button>`;
+}
+
+function renderHealthSummary(entry) {
+  const est = entryEstimate(entry);
+  const kcal = est
+    ? `<p class="eyebrow">Calories burned</p>
+       <p><strong>~${est.kcal} kcal</strong> <span class="muted">active, est. at ${est.met} MET over ${est.minutes} min</span></p>`
+    : `<p class="muted">Add your bodyweight in Settings to estimate calories burned.</p>`;
+  return `<div class="card">${kcal}${healthStateLine(entry) ? `<div class="mt-2">${healthStateLine(entry)}</div>` : ''}</div>`;
+}
+
+function renderHealthEntryStatus(entry) {
+  if (!Health.isConnected()) return '';
+  if (!entry.gh) return `<button class="btn small mt-2" data-action="health-send-past">Send unsent workouts to Google Health</button>`;
+  return `<div class="mt-2">${healthStateLine(entry)}</div>`;
+}
+
+function renderHealthSettings() {
+  const connected = Health.isConnected();
+  const unsent = connected ? Health.unsent(state.history).length : 0;
+  const waiting = connected ? Health.waitingCount(state.history) : 0;
+  return `
+    <div class="card">
+      <h3>Google Health</h3>
+      <p class="muted">Optional. Each finished workout becomes a strength training session in the Google Health app, with estimated calories burned.</p>
+      <label class="field-label mt-2" for="bodyweight-input">Bodyweight (${unitLabel()})</label>
+      <input type="number" id="bodyweight-input" inputmode="decimal" min="0" step="0.1" data-field="bodyweight" value="${escapeHtml(state.bodyweight)}" placeholder="Needed for calories">
+      <p class="muted">Calories are an estimate from bodyweight, time and pace (sets per minute). Rest-heavy sessions count lower.</p>
+      ${connected ? `
+        <p class="mt-2">Connected${waiting ? ` <span class="muted">· ${waiting} waiting</span>` : ''}</p>
+        <div class="row wrap mt-2">
+          ${waiting ? '<button class="btn primary" data-action="health-send">Send now</button>' : ''}
+          ${unsent ? `<button class="btn" data-action="health-send-past">Send ${unsent} past workout${unsent === 1 ? '' : 's'}</button>` : ''}
+          <button class="btn ghost danger-text" data-action="health-disconnect">Disconnect</button>
+        </div>
+      ` : `
+        <button class="btn primary block mt-2" data-action="health-connect">Connect Google Health</button>
+      `}
+    </div>
+  `;
+}
+
 function renderAiSettings() {
   const key = loadAiKey();
   return `
@@ -2072,8 +2173,13 @@ document.addEventListener('click', (e) => {
     case 'delete-history-entry': {
       const entryId = target.dataset.entryId;
       if (!confirm('Delete this logged session?')) break;
+      const gone = state.history.find(h => h.id === entryId);
       state.history = state.history.filter(h => h.id !== entryId);
       saveState();
+      if (gone?.gh?.name && Health.isConnected()) {
+        Health.queueDelete(gone.gh.name);
+        sendToHealth({ interactive: true });
+      }
       render();
       break;
     }
@@ -2081,6 +2187,26 @@ document.addEventListener('click', (e) => {
       state.ui.historyViewMode = target.dataset.mode;
       saveState();
       render();
+      break;
+    }
+    case 'health-connect':
+      connectHealth();
+      break;
+    case 'health-disconnect':
+      if (!confirm('Disconnect Google Health? Workouts already sent stay there.')) break;
+      Health.disconnect();
+      healthStatus = {};
+      render();
+      break;
+    case 'health-send':
+      sendToHealth({ interactive: true });
+      break;
+    case 'health-send-past': {
+      const list = Health.unsent(state.history);
+      if (!list.length) { showToast('Nothing to send.'); break; }
+      list.forEach(h => { h.gh = { state: 'pending' }; });
+      saveState();
+      sendToHealth({ interactive: true });
       break;
     }
     case 'export-data':
@@ -2225,6 +2351,10 @@ document.addEventListener('input', (e) => {
       state.restSeconds = e.target.value === '' ? '' : Number(e.target.value);
       saveState();
       break;
+    case 'bodyweight':
+      state.bodyweight = e.target.value === '' ? '' : Number(e.target.value);
+      saveState();
+      break;
     case 'ai-input':
       if (aiChat) aiChat.input = e.target.value;
       break;
@@ -2272,6 +2402,12 @@ document.addEventListener('change', (e) => {
 // ---------- Init ----------
 
 render();
+
+// Connected phones load Google sign-in early, so Finish can open its popup at once.
+if (Health.isConnected()) {
+  Health.preload().catch(() => {});
+  if (Health.validToken() && Health.waitingCount(state.history)) sendToHealth();
+}
 
 // ---------- Updates ----------
 // A new deploy ships a new sw.js. It installs, takes over at once and fires

@@ -1,15 +1,16 @@
-const CACHE_NAME = 'gym-companion-v14';
+const CACHE_NAME = 'gym-companion-v15';
 
 // The app shell — always fetched from the network first so updates show up
 // immediately when online. The cache is only the offline fallback.
 // GitHub Pages sends max-age=600, so revalidate instead of trusting the HTTP cache.
-const CORE_FILES = new Set(['', 'index.html', 'app.js', 'app.css', 'manifest.json']);
+const CORE_FILES = new Set(['', 'index.html', 'app.js', 'health.js', 'app.css', 'manifest.json']);
 
 const ALL_ASSETS = [
   './',
   './index.html',
   './app.css',
   './app.js',
+  './health.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
