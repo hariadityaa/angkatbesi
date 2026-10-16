@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gym-companion-v15';
+const CACHE_NAME = 'gym-companion-v16';
 
 // The app shell — always fetched from the network first so updates show up
 // immediately when online. The cache is only the offline fallback.
