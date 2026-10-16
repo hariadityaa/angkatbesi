@@ -489,7 +489,11 @@ body.sheet-open { overflow: hidden; }
   background: none; border: none; border-bottom: 1px solid var(--border);
   color: var(--text); font: inherit; text-align: left;
 }
-.sheet-item:last-child { border-bottom: none; }
+.sheet-item:last-child, .sheet-item:has(+ .sheet-section) { border-bottom: none; }
+.sheet-section {
+  margin: var(--s-4) 0 0; font-size: var(--text-xs); letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-3);
+}
 .sheet-item > .icon { color: var(--text-2); }
 .sheet-item .muted { white-space: normal; }
 .mt-4 { margin-top: var(--s-4); }
@@ -497,3 +501,10 @@ body.sheet-open { overflow: hidden; }
 .sheet-enter.sheet-backdrop { animation: fade-in 200ms ease-out; }
 @keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Optional per-exercise progression (exercise sheet) */
+.progression > summary { list-style: none; cursor: pointer; }
+.progression > summary::-webkit-details-marker { display: none; }
+.progression[open] > summary > .icon { transform: rotate(180deg); }
+.lift-target .goal { font-size: var(--text-xs); white-space: nowrap; }
+.lift-target .goal .icon { width: 12px; height: 12px; stroke-width: 2.5; vertical-align: -1px; }
