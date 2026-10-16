@@ -65,7 +65,7 @@ const Health = (() => {
       notes: notes.slice(0, 2000)
     };
     if (est) exercise.activeDuration = `${est.minutes * 60}s`;
-    return { exercise };
+    return { exercise, dataSource: { recordingMethod: 'MANUAL' } };
   }
 
   // ---------- Storage ----------
@@ -188,7 +188,11 @@ const Health = (() => {
       for (const e of pending) {
         try {
           const op = await call(token, 'POST', API, toDataPoint(e, weight, unit));
-          e.gh = { state: 'done', name: op?.response?.name || null };
+          // A 200 can still carry a failed operation. Only a returned name proves it was stored.
+          if (op?.error) e.gh = { state: 'failed', error: op.error.message || `Error ${op.error.code}` };
+          else if (op?.response?.name) e.gh = { state: 'done', name: op.response.name };
+          else if (op?.done === false) e.gh = { state: 'done', name: null }; // Still processing at Google.
+          else e.gh = { state: 'failed', error: `No session returned (${JSON.stringify(op).slice(0, 200)})` };
         } catch (err) {
           if (!permanent(err)) throw err;
           e.gh = { state: 'failed', error: err.message };
