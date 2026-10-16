@@ -522,6 +522,8 @@ const ICONS = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+  back: '<path d="m15 18-6-6 6-6"/>',
   clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'
 };
 function icon(name) {
@@ -600,28 +602,22 @@ async function handleInstall() {
   if (e) await e.prompt().catch(() => {});
 }
 
-function renderInstallSettings() {
+function renderInstallRow() {
   if (isStandalone()) return '';
-  const body = installEvent
-    ? '<button class="btn primary block mt-2" data-action="install-app">Install app</button>'
-    : `<p class="muted">Android Chrome: an <strong>Install app</strong> button appears here once Chrome allows it. Reload and wait a few seconds. If an old HeavyHo icon is on your home screen, uninstall it first.</p>
-       <p class="muted">iPhone Safari: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>`;
+  if (installEvent) return `
+    <div class="set-row"><span>Install app</span>
+      <button class="btn small" data-action="install-app">Install</button></div>`;
   return `
-    <div class="card">
-      <h3>Install app</h3>
-      ${body}
-    </div>`;
+    <div class="set-row col"><span>Install app</span>
+      <span class="muted">Android: reload and wait for an Install button here. iPhone: Share › Add to Home Screen.</span></div>`;
 }
 
 // ---------- Share ----------
 // Installed apps hide the address bar, so this is the only way to find the link.
-function renderShareSettings() {
+function renderShareRow() {
   return `
-    <div class="card">
-      <h3>Share app</h3>
-      <p class="muted">Send Iron Log to a friend. Only the link is shared, never your data.</p>
-      <button class="btn block mt-2" data-action="share-app">Share link</button>
-    </div>`;
+    <div class="set-row"><span>Share Iron Log <span class="muted">link only</span></span>
+      <button class="btn small" data-action="share-app">Share</button></div>`;
 }
 
 async function handleShareApp() {
@@ -650,7 +646,7 @@ function renderTrainTab() {
   if (!next) {
     if (sessions.length) {
       return `
-        <div class="top-bar"><h1>Train</h1></div>
+        <div class="top-bar"><h1>Train</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
         ${renderInstallCard()}
         <div class="empty-state">
           <p>Your sessions have no exercises yet.</p>
@@ -658,7 +654,7 @@ function renderTrainTab() {
         </div>`;
     }
     return `
-      <div class="top-bar"><h1>Train</h1></div>
+      <div class="top-bar"><h1>Train</h1><button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button></div>
       ${renderInstallCard()}
       <div class="card hero">
         <p class="eyebrow">Get started</p>
@@ -676,6 +672,7 @@ function renderTrainTab() {
         <h1>Train</h1>
         <p class="muted">${greeting()}. ${escapeHtml(next.name)} is up.</p>
       </div>
+      <button class="icon-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button>
     </div>
     ${renderInstallCard()}
     ${renderWeekCard()}
@@ -1252,33 +1249,40 @@ function renderHistoryTab() {
 
 function renderSettingsTab() {
   return `
-    <div class="top-bar"><h1>Settings</h1></div>
-    ${renderInstallSettings()}
-    ${renderShareSettings()}
-    ${renderAiSettings()}
-    ${renderHealthSettings()}
-    <div class="card">
-      <label class="field-label">Weight unit label</label>
-      <input type="text" data-field="unit" value="${escapeHtml(state.unit)}" maxlength="6">
-      <p class="muted">Just a label shown next to weight fields (e.g. kg, lb) — changing it does not convert existing numbers.</p>
+    <div class="top-bar settings-head">
+      <button class="icon-btn" data-action="close-settings" aria-label="Back">${icon('back')}</button>
+      <h1>Settings</h1>
     </div>
-    <div class="card">
-      <label class="field-label">Rest timer default (seconds)</label>
-      <input type="number" min="0" step="5" data-field="rest-seconds" value="${escapeHtml(state.restSeconds)}">
-      <p class="muted">Starts counting down automatically whenever you check off a set during a workout.</p>
+    <p class="set-label">Workout</p>
+    <div class="card set-card">
+      <label class="set-row"><span>Weight unit</span>
+        <input type="text" data-field="unit" value="${escapeHtml(state.unit)}" maxlength="6"></label>
+      <label class="set-row"><span>Rest timer <span class="muted">sec</span></span>
+        <input type="number" min="0" step="5" data-field="rest-seconds" value="${escapeHtml(state.restSeconds)}"></label>
+      <label class="set-row"><span>Bodyweight <span class="muted">${unitLabel()}</span></span>
+        <input type="number" inputmode="decimal" min="0" step="0.1" data-field="bodyweight" value="${escapeHtml(state.bodyweight)}" placeholder="–"></label>
     </div>
-    <div class="card">
-      <h3>Backup your data</h3>
-      <p class="muted">Everything is stored only in this browser. Export a backup occasionally so you don't lose it if you clear browser data or switch phones.</p>
-      <div class="row wrap mt-2">
-        <button class="btn" data-action="export-data">Export backup (.json)</button>
-        <button class="btn" data-action="import-data">Import backup</button>
-      </div>
+    <p class="set-note">Unit is a label only. Bodyweight feeds calorie estimates.</p>
+    <p class="set-label">Connections</p>
+    <div class="card set-card">
+      ${renderHealthSettings()}
+      ${renderAiSettings()}
     </div>
-    <div class="card">
-      <h3>Danger zone</h3>
-      <button class="btn danger block" data-action="clear-all-data">Erase all data</button>
+    <p class="set-note">Your Gemini key stays on this device. On the free tier Google may use prompts to improve its products.</p>
+    <p class="set-label">Data</p>
+    <div class="card set-card">
+      <div class="set-row col"><span>Backup</span><span class="muted">Data lives only in this browser.</span>
+        <div class="row set-pair">
+          <button class="btn" data-action="export-data">Export</button>
+          <button class="btn" data-action="import-data">Import</button>
+        </div></div>
     </div>
+    <p class="set-label">App</p>
+    <div class="card set-card">
+      ${renderShareRow()}
+      ${renderInstallRow()}
+    </div>
+    <button class="btn ghost danger-text block mt-3" data-action="clear-all-data">Erase all data</button>
   `;
 }
 
@@ -1913,55 +1917,34 @@ function renderHealthSettings() {
   const connected = Health.isConnected();
   const unsent = connected ? Health.unsent(state.history).length : 0;
   const waiting = connected ? Health.waitingCount(state.history) : 0;
+  if (!connected) return `
+    <div class="set-row"><span>Google Health <span class="muted block">Logs workouts with calories</span></span>
+      <button class="btn small" data-action="health-connect">Connect</button></div>`;
   return `
-    <div class="card">
-      <h3>Google Health</h3>
-      <p class="muted">Optional. Each finished workout becomes a strength training session in the Google Health app, with estimated calories burned.</p>
-      <label class="field-label mt-2" for="bodyweight-input">Bodyweight (${unitLabel()})</label>
-      <input type="number" id="bodyweight-input" inputmode="decimal" min="0" step="0.1" data-field="bodyweight" value="${escapeHtml(state.bodyweight)}" placeholder="Needed for calories">
-      <p class="muted">Calories are an estimate from bodyweight, time and pace (sets per minute). Rest-heavy sessions count lower.</p>
-      ${connected ? `
-        <p class="mt-2">Connected${waiting ? ` <span class="muted">· ${waiting} waiting</span>` : ''}</p>
-        <div class="row wrap mt-2">
-          ${waiting ? '<button class="btn primary" data-action="health-send">Send now</button>' : ''}
-          ${unsent ? `<button class="btn" data-action="health-send-past">Send ${unsent} past workout${unsent === 1 ? '' : 's'}</button>` : ''}
-          <button class="btn ghost danger-text" data-action="health-disconnect">Disconnect</button>
-        </div>
-      ` : `
-        <button class="btn primary block mt-2" data-action="health-connect">Connect Google Health</button>
-      `}
-    </div>
-  `;
+    <div class="set-row col">
+      <div class="row between"><span>Google Health <span class="muted block">Connected${waiting ? ` · ${waiting} waiting` : ''}</span></span>
+        <button class="btn small ghost danger-text" data-action="health-disconnect">Disconnect</button></div>
+      ${waiting || unsent ? `<div class="row wrap">
+        ${waiting ? '<button class="btn small primary" data-action="health-send">Send now</button>' : ''}
+        ${unsent ? `<button class="btn small" data-action="health-send-past">Send ${unsent} past</button>` : ''}
+      </div>` : ''}
+    </div>`;
 }
 
 function renderAiSettings() {
   const key = loadAiKey();
+  if (key) return `
+    <div class="set-row"><span>Gemini AI <span class="muted block">Key ··${escapeHtml(key.slice(-4))}</span></span>
+      <span class="row"><button class="btn small" data-action="ai-key-test">Test</button>
+      <button class="btn small ghost danger-text" data-action="ai-key-remove">Remove</button></span></div>`;
   return `
-    <div class="card">
-      <h3>AI routine builder</h3>
-      <p class="muted">Optional. Describe a goal and Gemini drafts or adjusts your routine. It needs your own free Gemini key. The key stays in this browser and is not included in backups.</p>
-      ${key ? `
-        <p class="mt-2">Key saved <span class="muted">ending ${escapeHtml(key.slice(-4))}</span></p>
-        <div class="row wrap mt-2">
-          <button class="btn" data-action="ai-key-test">Test key</button>
-          <button class="btn ghost danger-text" data-action="ai-key-remove">Remove key</button>
-        </div>
-      ` : `
-        <label class="field-label mt-2" for="ai-key-input">Gemini API key</label>
-        <input type="password" id="ai-key-input" autocomplete="off" spellcheck="false" placeholder="Paste your key">
-        <button class="btn primary block mt-2" data-action="ai-key-save">Save key</button>
-        <details class="guide mt-3">
-          <summary>How to get a free key</summary>
-          <ol>
-            <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> and sign in with Google.</li>
-            <li>Tap "Create API key".</li>
-            <li>Copy the key and paste it above.</li>
-          </ol>
-        </details>
-      `}
-      <p class="muted mt-2">On the free tier Google may use what you type to improve its products.</p>
-    </div>
-  `;
+    <div class="set-row col"><span>Gemini AI <span class="muted block">Drafts routines from a goal. Needs your free key.</span></span>
+      <div class="row">
+        <input type="password" id="ai-key-input" autocomplete="off" spellcheck="false" placeholder="Paste key" aria-label="Gemini API key">
+        <button class="btn small primary" data-action="ai-key-save">Save</button>
+      </div>
+      <a class="set-link" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key at aistudio.google.com</a>
+    </div>`;
 }
 
 async function testAiKey() {
@@ -2020,6 +2003,13 @@ document.addEventListener('click', (e) => {
       break;
     case 'install-decline':
       handleDeclineInstall();
+      break;
+    case 'open-settings':
+    case 'close-settings':
+      state.ui.activeTab = action === 'open-settings' ? 'settings' : 'train';
+      saveState();
+      render();
+      window.scrollTo(0, 0);
       break;
     case 'share-app':
       handleShareApp();
