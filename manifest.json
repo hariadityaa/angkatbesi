@@ -1,6 +1,6 @@
 {
-  "name": "Iron Log",
-  "short_name": "Iron Log",
+  "name": "Beban Book",
+  "short_name": "Beban Book",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

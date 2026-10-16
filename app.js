@@ -1,4 +1,4 @@
-/* Iron Log — all data stored in this browser via localStorage. No server. */
+/* Beban Book — all data stored in this browser via localStorage. No server. */
 
 const STORAGE_KEY = 'gymCompanionData_v1';
 
@@ -557,7 +557,7 @@ function renderUpdateBanner() {
   if (!updateReady) return '';
   return `
     <div class="card update-banner" role="status">
-      <p><strong>A new version of Iron Log is ready.</strong></p>
+      <p><strong>A new version of Beban Book is ready.</strong></p>
       <button class="btn primary block mt-2" data-action="update-app">Update now</button>
     </div>`;
 }
@@ -577,7 +577,7 @@ function renderInstallCard() {
   if (!installEvent || installDeclined() || isStandalone()) return '';
   return `
     <div class="card">
-      <h3>Put Iron Log on your home screen</h3>
+      <h3>Put Beban Book on your home screen</h3>
       <p class="muted">Open it like any other app. It works without internet too.</p>
       <div class="row install-row">
         <button class="btn primary" data-action="install-app">Install app</button>
@@ -619,7 +619,7 @@ function renderShareSettings() {
   return `
     <div class="card">
       <h3>Share app</h3>
-      <p class="muted">Send Iron Log to a friend. Only the link is shared, never your data.</p>
+      <p class="muted">Send Beban Book to a friend. Only the link is shared, never your data.</p>
       <button class="btn block mt-2" data-action="share-app">Share link</button>
     </div>`;
 }
@@ -627,7 +627,7 @@ function renderShareSettings() {
 async function handleShareApp() {
   const url = new URL('./', location.href).href;
   if (navigator.share) {
-    try { await navigator.share({ title: 'Iron Log', url }); return; }
+    try { await navigator.share({ title: 'Beban Book', url }); return; }
     catch (err) { if (err && err.name === 'AbortError') return; }
   }
   try { await navigator.clipboard.writeText(url); showToast('Link copied.'); }
@@ -1361,7 +1361,7 @@ function handleCancelWorkout() {
 
 function exportData() {
   const stamp = new Date().toISOString().slice(0, 10);
-  downloadJson(`iron-log-backup-${stamp}.json`, state);
+  downloadJson(`beban-book-backup-${stamp}.json`, state);
 }
 
 function importDataFromFile(file) {
@@ -1464,7 +1464,7 @@ function routineForSharing() {
 
 function routineShareFilename() {
   const slug = state.routine.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'routine';
-  return `iron-log-${slug}.json`;
+  return `beban-book-${slug}.json`;
 }
 
 function copyRoutineJson() {
@@ -1507,7 +1507,7 @@ const AI_TIMEOUT_MS = 60000;
 const AI_MAX_SESSIONS = 7;
 const AI_MAX_EXERCISES = 12;
 
-const AI_SYSTEM_PROMPT = `You are a strength coach writing gym routines for the Iron Log app. Answer with JSON matching the schema.
+const AI_SYSTEM_PROMPT = `You are a strength coach writing gym routines for the Beban Book app. Answer with JSON matching the schema.
 - reply: one or two short sentences to the user. Say what you built or changed. If the goal is vague, ask one question here and still return your best routine.
 - sessions: one per training day, in the order they should be trained. 1 to ${AI_MAX_SESSIONS} sessions, up to 10 exercises each.
 - sets: 1 to 10. reps: text, such as "10", "8-12" or "30s".
@@ -2293,7 +2293,7 @@ document.addEventListener('click', (e) => {
       downloadJson(routineShareFilename(), routineForSharing());
       break;
     case 'download-sample-routine':
-      downloadJson('iron-log-sample-routine.json', SAMPLE_ROUTINE);
+      downloadJson('beban-book-sample-routine.json', SAMPLE_ROUTINE);
       break;
     case 'copy-sample-routine': {
       const text = JSON.stringify(SAMPLE_ROUTINE, null, 2);
