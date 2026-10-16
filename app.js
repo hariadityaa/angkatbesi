@@ -254,11 +254,22 @@ function topWeight(sets) {
   return w.length ? Math.max(...w) : null;
 }
 
-// Next workout's weights: last session's, plus one increment if every set was completed.
-function progressionFor(exerciseId, name) {
-  const prev = lastLoggedSets(exerciseId, name);
-  if (!prev || !prev.length) return null;
-  const inc = prev.every(s => s.completed) ? weightIncrement() : 0;
+// Optional per-exercise step overrides the global one. 0 means hold the weight.
+function stepFor(ex) {
+  return isNum(ex.step) && Number(ex.step) >= 0 ? Number(ex.step) : weightIncrement();
+}
+
+// Next workout's weights: last session's, plus one step if every set was completed.
+// With no history, falls back to the exercise's optional start weight.
+function progressionFor(ex) {
+  const prev = lastLoggedSets(ex.id, ex.name);
+  if (!prev || !prev.length) {
+    if (!isNum(ex.startWeight) || Number(ex.startWeight) <= 0) return null;
+    const start = roundWeight(Number(ex.startWeight));
+    const n = Number(ex.targetSets) || 1;
+    return { weights: Array(n).fill(start), last: null, next: start, up: false, planned: true };
+  }
+  const inc = prev.every(s => s.completed) ? stepFor(ex) : 0;
   const weights = prev.map(s => isNum(s.weight) && Number(s.weight) > 0 ? roundWeight(Number(s.weight) + inc) : null);
   const used = prev.filter(s => isNum(s.weight) && Number(s.weight) > 0).map(s => Number(s.weight));
   const last = used.length ? Math.max(...used) : null;
@@ -509,6 +520,7 @@ const ICONS = {
   reorder: '<path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'
 };
 function icon(name) {
@@ -724,14 +736,22 @@ function renderNextUpCard(s) {
       <p class="muted">${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'} · ${last ? 'last done ' + relativeDay(last) : 'first time'}</p>
       <ul class="lift-list">
         ${s.exercises.map(ex => {
-          const p = progressionFor(ex.id, ex.name);
+          const p = progressionFor(ex);
           let target = '<span class="muted">new</span>';
-          if (p && p.last != null) {
+          if (p && p.planned) {
+            target = `<strong>${p.next}</strong>`;
+          } else if (p && p.last != null) {
             target = p.up
               ? `<span class="muted">${p.last} →</span> <strong class="up">${p.next}</strong>`
               : `<strong>${p.last}</strong>`;
           } else if (p) {
             target = '<span class="muted">—</span>';
+          }
+          if (isNum(ex.goalWeight) && Number(ex.goalWeight) > 0) {
+            const goal = Number(ex.goalWeight);
+            target += p && p.next != null && p.next >= goal
+              ? ` <span class="up goal">${icon('check')}${goal}</span>`
+              : ` <span class="muted goal">/${goal}</span>`;
           }
           return `
           <li>
@@ -898,7 +918,9 @@ function renderTemplateRows() {
 
 function renderImportJsonForm() {
   return `
-    <p class="muted">Edit the sample below or paste your own. Importing adds these sessions without deleting anything.</p>
+    <p class="muted">Open a saved .json file, or paste JSON below. Importing adds sessions without deleting anything.</p>
+    <button class="btn block mt-3" data-action="open-routine-file">${icon('folder')} Open file</button>
+    <input type="file" id="routine-file-input" accept="application/json,.json" hidden>
     <textarea id="import-json-textarea" class="mt-2" rows="9">${escapeHtml(JSON.stringify(SAMPLE_ROUTINE, null, 2))}</textarea>
     <button class="btn primary block mt-3" data-action="import-routine-json">Import</button>
     <div class="row mt-2">
@@ -1020,8 +1042,8 @@ function renderSheet() {
   let body = '';
   switch (sheet.kind) {
     case 'menu': body = renderRoutineMenu(); break;
-    case 'templates': body = `<h2>Add from template</h2><p class="muted">Adds that program's sessions. Nothing existing is deleted.</p><div class="mt-3">${renderTemplateRows()}</div>`; break;
-    case 'import': body = `<h2>Import JSON</h2>${renderImportJsonForm()}`; break;
+    case 'templates': body = `<h2>Use a template</h2><p class="muted">Adds that program's sessions. Nothing existing is deleted.</p><div class="mt-3">${renderTemplateRows()}</div>`; break;
+    case 'import': body = `<h2>Import a routine</h2>${renderImportJsonForm()}`; break;
     case 'exercise': body = renderExerciseSheet(); break;
     case 'ai': body = renderAiSheet(); break;
   }
@@ -1048,14 +1070,37 @@ function sheetItem(action, iconName, label, sub) {
 function renderRoutineMenu() {
   const hasExercises = state.routine.sessions.some(s => s.exercises.length);
   return `
-    ${state.routine.sessions.length ? sheetItem('reorder-start', 'reorder', 'Reorder') : ''}
-    ${hasExercises ? sheetItem('share-routine', 'share', 'Share routine', 'Sessions, exercises, sets and reps. No weights or history.') : ''}
-    ${hasExercises ? sheetItem('download-routine', 'download', 'Download .json') : ''}
-    ${hasAiKey() && hasExercises ? sheetItem('open-ai-adjust', 'sparkle', 'Adjust with AI', 'Describe a change. Kept exercises keep their history.') : ''}
-    ${hasAiKey() ? sheetItem('open-ai-create', 'sparkle', 'New routine with AI', 'Replaces this routine. Workout history is kept.') : ''}
-    ${sheetItem('open-templates', 'grid', 'Add from template')}
-    ${sheetItem('open-import', 'clipboard', 'Import JSON')}
+    ${state.routine.sessions.length ? sheetItem('reorder-start', 'reorder', 'Reorder', 'Move sessions and exercises') : ''}
+    ${hasExercises ? `
+      <p class="sheet-section">Share</p>
+      ${sheetItem('share-routine', 'share', 'Send to someone', 'Opens your share sheet. Sets and reps only, no weights.')}
+      ${sheetItem('download-routine', 'download', 'Save as file', 'Downloads a .json copy. Import it later or on another phone.')}
+    ` : ''}
+    <p class="sheet-section">Add sessions</p>
+    ${sheetItem('open-templates', 'grid', 'Use a template', ROUTINE_TEMPLATES.map(t => t.label).join(', '))}
+    ${sheetItem('open-import', 'clipboard', 'Import a routine', 'Paste JSON someone sent you, or open a saved file.')}
+    ${hasAiKey() ? `
+      <p class="sheet-section">AI</p>
+      ${hasExercises ? sheetItem('open-ai-adjust', 'sparkle', 'Adjust with AI', 'Describe a change. Kept exercises keep their history.') : ''}
+      ${sheetItem('open-ai-create', 'sparkle', 'New routine with AI', 'Replaces this routine. Workout history is kept.')}
+    ` : ''}
   `;
+}
+
+const PROGRESSION_FIELDS = ['startWeight', 'step', 'goalWeight'];
+
+function hasProgression(ex) {
+  return PROGRESSION_FIELDS.some(k => isNum(ex[k]));
+}
+
+function progressionInput(ex, ids, key, label, placeholder) {
+  const v = isNum(ex[key]) ? ex[key] : '';
+  return `
+        <div class="grow">
+          <label class="field-label" for="sheet-ex-${key}">${label} (${unitLabel()})</label>
+          <input type="number" id="sheet-ex-${key}" min="0" step="0.5" inputmode="decimal" placeholder="${placeholder}"
+            data-field="progression" data-key="${key}" ${ids} value="${escapeHtml(v)}">
+        </div>`;
 }
 
 function renderExerciseSheet() {
@@ -1079,6 +1124,15 @@ function renderExerciseSheet() {
     </div>
     <label class="field-label mt-3" for="sheet-ex-notes">Notes</label>
     <input type="text" id="sheet-ex-notes" placeholder="Optional" data-field="exercise-notes" ${ids} value="${escapeHtml(ex.notes || '')}">
+    <details class="progression mt-3"${hasProgression(ex) ? ' open' : ''}>
+      <summary class="disclosure"><span class="grow">Progression <span class="muted">(optional)</span></span>${icon('chevDown')}</summary>
+      <div class="row mt-2">
+        ${progressionInput(ex, ids, 'startWeight', 'Start', '')}
+        ${progressionInput(ex, ids, 'step', 'Step', String(weightIncrement()))}
+        ${progressionInput(ex, ids, 'goalWeight', 'Goal', '')}
+      </div>
+      <p class="muted mt-2">Start is used until you log this exercise. Step 0 holds the weight.</p>
+    </details>
     <div class="row between mt-4">
       <button class="btn ghost danger-text" data-action="delete-exercise" ${ids}>${icon('trash')} Delete</button>
       <button class="btn primary" data-action="close-sheet">Done</button>
@@ -1221,7 +1275,7 @@ function handleStartSession(sessionId) {
     sessionName: s.name,
     startedAt: new Date().toISOString(),
     exercises: s.exercises.map(ex => {
-      const prog = progressionFor(ex.id, ex.name);
+      const prog = progressionFor(ex);
       const numSets = Number(ex.targetSets) || 1;
       const sets = [];
       for (let i = 0; i < numSets; i++) {
@@ -1309,6 +1363,26 @@ function importDataFromFile(file) {
   reader.readAsText(file);
 }
 
+// Shared JSON uses short keys: start, step, goal. All optional.
+const SHARED_PROGRESSION_KEYS = { start: 'startWeight', step: 'step', goal: 'goalWeight' };
+
+function progressionFromShared(e) {
+  const out = {};
+  for (const [shared, key] of Object.entries(SHARED_PROGRESSION_KEYS)) {
+    const v = e[shared] != null ? e[shared] : e[key];
+    if (isNum(v) && Number(v) >= 0) out[key] = Number(v);
+  }
+  return out;
+}
+
+function progressionForSharing(e) {
+  const out = {};
+  for (const [shared, key] of Object.entries(SHARED_PROGRESSION_KEYS)) {
+    if (isNum(e[key])) out[shared] = Number(e[key]);
+  }
+  return out;
+}
+
 function sessionsFromRoutineData(routineData) {
   return routineData.sessions.map(s => ({
     id: uid(),
@@ -1318,7 +1392,8 @@ function sessionsFromRoutineData(routineData) {
       name: String(e.name || ''),
       targetSets: Number(e.sets != null ? e.sets : e.targetSets) || 3,
       targetReps: String(e.reps != null ? e.reps : (e.targetReps != null ? e.targetReps : '10')),
-      notes: e.notes ? String(e.notes) : ''
+      notes: e.notes ? String(e.notes) : '',
+      ...progressionFromShared(e)
     })) : []
   }));
 }
@@ -1352,7 +1427,8 @@ function routineForSharing() {
           name: e.name,
           sets: e.targetSets,
           reps: /^\d+$/.test(e.targetReps) ? Number(e.targetReps) : e.targetReps,
-          ...(e.notes ? { notes: e.notes } : {})
+          ...(e.notes ? { notes: e.notes } : {}),
+          ...progressionForSharing(e)
         }))
       }))
   };
@@ -1596,8 +1672,8 @@ async function sendAiMessage() {
 
 // Keeps the ids of sessions and exercises the model kept, so their history and PRs stay linked.
 function sessionsFromAiDraft(draft, keepIds) {
-  const oldSessions = new Set(state.routine.sessions.map(s => s.id));
-  const oldExercises = new Set(state.routine.sessions.flatMap(s => s.exercises.map(ex => ex.id)));
+  const oldSessions = new Map(state.routine.sessions.map(s => [s.id, s]));
+  const oldExercises = new Map(state.routine.sessions.flatMap(s => s.exercises.map(ex => [ex.id, ex])));
   const used = new Set();
   const keep = (id, known) => {
     if (keepIds && id && known.has(id) && !used.has(id)) { used.add(id); return id; }
@@ -1606,9 +1682,11 @@ function sessionsFromAiDraft(draft, keepIds) {
   return draft.sessions.map(s => ({
     id: keep(s.id, oldSessions),
     name: s.name,
-    exercises: s.exercises.map(e => ({
-      id: keep(e.id, oldExercises), name: e.name, targetSets: e.sets, targetReps: e.reps, notes: e.notes
-    }))
+    exercises: s.exercises.map(e => {
+      const id = keep(e.id, oldExercises);
+      // A kept exercise also keeps fields the model never sees, such as start, step and goal weights.
+      return { ...(oldExercises.get(id) || {}), id, name: e.name, targetSets: e.sets, targetReps: e.reps, notes: e.notes };
+    })
   }));
 }
 
@@ -1899,6 +1977,9 @@ document.addEventListener('click', (e) => {
     case 'open-routine-menu':
       openSheet({ kind: 'menu' });
       break;
+    case 'open-routine-file':
+      document.getElementById('routine-file-input').click();
+      break;
     case 'open-templates':
       openSheet({ kind: 'templates' });
       break;
@@ -2089,6 +2170,16 @@ document.addEventListener('input', (e) => {
       saveState();
       break;
     }
+    case 'progression': {
+      const s = findSession(sessionId);
+      const ex = s.exercises.find(x => x.id === exerciseId);
+      const key = e.target.dataset.key;
+      if (!PROGRESSION_FIELDS.includes(key)) break;
+      if (isNum(e.target.value)) ex[key] = Number(e.target.value);
+      else delete ex[key];
+      saveState();
+      break;
+    }
     case 'set-reps': {
       const ex = state.activeWorkoutDraft.exercises.find(x => x.exerciseId === exerciseId);
       ex.sets[setIndex].reps = e.target.value;
@@ -2126,6 +2217,17 @@ document.addEventListener('change', (e) => {
     state.ui.historyExerciseFilter = e.target.value;
     saveState();
     render();
+    return;
+  }
+  if (e.target.id === 'routine-file-input' && e.target.files[0]) {
+    e.target.files[0].text().then(text => {
+      if (importRoutineFromJsonText(text)) {
+        if (sheet) closeSheet();
+        render();
+        showToast('Routine imported.');
+      }
+    });
+    e.target.value = '';
     return;
   }
   if (e.target.id === 'import-file-input' && e.target.files[0]) {
