@@ -612,6 +612,27 @@ function renderInstallSettings() {
     </div>`;
 }
 
+// ---------- Share ----------
+// Installed apps hide the address bar, so this is the only way to find the link.
+function renderShareSettings() {
+  return `
+    <div class="card">
+      <h3>Share app</h3>
+      <p class="muted">Send Iron Log to a friend. Only the link is shared, never your data.</p>
+      <button class="btn block mt-2" data-action="share-app">Share link</button>
+    </div>`;
+}
+
+async function handleShareApp() {
+  const url = new URL('./', location.href).href;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Iron Log', url }); return; }
+    catch (err) { if (err && err.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(url); showToast('Link copied.'); }
+  catch { showToast(url); }
+}
+
 function handleDeclineInstall() {
   try { localStorage.setItem(INSTALL_DECLINED, '1'); } catch { /* storage blocked */ }
   render();
@@ -1230,6 +1251,7 @@ function renderSettingsTab() {
   return `
     <div class="top-bar"><h1>Settings</h1></div>
     ${renderInstallSettings()}
+    ${renderShareSettings()}
     ${renderAiSettings()}
     <div class="card">
       <label class="field-label">Weight unit label</label>
@@ -1862,6 +1884,9 @@ document.addEventListener('click', (e) => {
       break;
     case 'install-decline':
       handleDeclineInstall();
+      break;
+    case 'share-app':
+      handleShareApp();
       break;
     case 'cancel-workout':
       handleCancelWorkout();
