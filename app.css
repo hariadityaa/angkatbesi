@@ -489,7 +489,11 @@ body.sheet-open { overflow: hidden; }
   background: none; border: none; border-bottom: 1px solid var(--border);
   color: var(--text); font: inherit; text-align: left;
 }
-.sheet-item:last-child { border-bottom: none; }
+.sheet-item:last-child, .sheet-item:has(+ .sheet-section) { border-bottom: none; }
+.sheet-section {
+  margin: var(--s-4) 0 0; font-size: var(--text-xs); letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-3);
+}
 .sheet-item > .icon { color: var(--text-2); }
 .sheet-item .muted { white-space: normal; }
 .mt-4 { margin-top: var(--s-4); }

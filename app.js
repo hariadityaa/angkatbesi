@@ -508,6 +508,7 @@ const ICONS = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   reorder: '<path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'
 };
 function icon(name) {
@@ -896,7 +897,9 @@ function renderTemplateRows() {
 
 function renderImportJsonForm() {
   return `
-    <p class="muted">Edit the sample below or paste your own. Importing adds these sessions without deleting anything.</p>
+    <p class="muted">Open a saved .json file, or paste JSON below. Importing adds sessions without deleting anything.</p>
+    <button class="btn block mt-3" data-action="open-routine-file">${icon('folder')} Open file</button>
+    <input type="file" id="routine-file-input" accept="application/json,.json" hidden>
     <textarea id="import-json-textarea" class="mt-2" rows="9">${escapeHtml(JSON.stringify(SAMPLE_ROUTINE, null, 2))}</textarea>
     <button class="btn primary block mt-3" data-action="import-routine-json">Import</button>
     <div class="row mt-2">
@@ -1018,8 +1021,8 @@ function renderSheet() {
   let body = '';
   switch (sheet.kind) {
     case 'menu': body = renderRoutineMenu(); break;
-    case 'templates': body = `<h2>Add from template</h2><p class="muted">Adds that program's sessions. Nothing existing is deleted.</p><div class="mt-3">${renderTemplateRows()}</div>`; break;
-    case 'import': body = `<h2>Import JSON</h2>${renderImportJsonForm()}`; break;
+    case 'templates': body = `<h2>Use a template</h2><p class="muted">Adds that program's sessions. Nothing existing is deleted.</p><div class="mt-3">${renderTemplateRows()}</div>`; break;
+    case 'import': body = `<h2>Import a routine</h2>${renderImportJsonForm()}`; break;
     case 'exercise': body = renderExerciseSheet(); break;
   }
   const anim = sheetAnimate ? ' sheet-enter' : '';
@@ -1045,11 +1048,15 @@ function sheetItem(action, iconName, label, sub) {
 function renderRoutineMenu() {
   const hasExercises = state.routine.sessions.some(s => s.exercises.length);
   return `
-    ${state.routine.sessions.length ? sheetItem('reorder-start', 'reorder', 'Reorder') : ''}
-    ${hasExercises ? sheetItem('share-routine', 'share', 'Share routine', 'Sessions, exercises, sets and reps. No weights or history.') : ''}
-    ${hasExercises ? sheetItem('download-routine', 'download', 'Download .json') : ''}
-    ${sheetItem('open-templates', 'grid', 'Add from template')}
-    ${sheetItem('open-import', 'clipboard', 'Import JSON')}
+    ${state.routine.sessions.length ? sheetItem('reorder-start', 'reorder', 'Reorder', 'Move sessions and exercises') : ''}
+    ${hasExercises ? `
+      <p class="sheet-section">Share</p>
+      ${sheetItem('share-routine', 'share', 'Send to someone', 'Opens your share sheet. Sets and reps only, no weights.')}
+      ${sheetItem('download-routine', 'download', 'Save as file', 'Downloads a .json copy. Import it later or on another phone.')}
+    ` : ''}
+    <p class="sheet-section">Add sessions</p>
+    ${sheetItem('open-templates', 'grid', 'Use a template', ROUTINE_TEMPLATES.map(t => t.label).join(', '))}
+    ${sheetItem('open-import', 'clipboard', 'Import a routine', 'Paste JSON someone sent you, or open a saved file.')}
   `;
 }
 
@@ -1546,6 +1553,9 @@ document.addEventListener('click', (e) => {
     case 'open-routine-menu':
       openSheet({ kind: 'menu' });
       break;
+    case 'open-routine-file':
+      document.getElementById('routine-file-input').click();
+      break;
     case 'open-templates':
       openSheet({ kind: 'templates' });
       break;
@@ -1741,6 +1751,17 @@ document.addEventListener('change', (e) => {
     state.ui.historyExerciseFilter = e.target.value;
     saveState();
     render();
+    return;
+  }
+  if (e.target.id === 'routine-file-input' && e.target.files[0]) {
+    e.target.files[0].text().then(text => {
+      if (importRoutineFromJsonText(text)) {
+        if (sheet) closeSheet();
+        render();
+        showToast('Routine imported.');
+      }
+    });
+    e.target.value = '';
     return;
   }
   if (e.target.id === 'import-file-input' && e.target.files[0]) {
