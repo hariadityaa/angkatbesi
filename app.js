@@ -254,11 +254,22 @@ function topWeight(sets) {
   return w.length ? Math.max(...w) : null;
 }
 
-// Next workout's weights: last session's, plus one increment if every set was completed.
-function progressionFor(exerciseId, name) {
-  const prev = lastLoggedSets(exerciseId, name);
-  if (!prev || !prev.length) return null;
-  const inc = prev.every(s => s.completed) ? weightIncrement() : 0;
+// Optional per-exercise step overrides the global one. 0 means hold the weight.
+function stepFor(ex) {
+  return isNum(ex.step) && Number(ex.step) >= 0 ? Number(ex.step) : weightIncrement();
+}
+
+// Next workout's weights: last session's, plus one step if every set was completed.
+// With no history, falls back to the exercise's optional start weight.
+function progressionFor(ex) {
+  const prev = lastLoggedSets(ex.id, ex.name);
+  if (!prev || !prev.length) {
+    if (!isNum(ex.startWeight) || Number(ex.startWeight) <= 0) return null;
+    const start = roundWeight(Number(ex.startWeight));
+    const n = Number(ex.targetSets) || 1;
+    return { weights: Array(n).fill(start), last: null, next: start, up: false, planned: true };
+  }
+  const inc = prev.every(s => s.completed) ? stepFor(ex) : 0;
   const weights = prev.map(s => isNum(s.weight) && Number(s.weight) > 0 ? roundWeight(Number(s.weight) + inc) : null);
   const used = prev.filter(s => isNum(s.weight) && Number(s.weight) > 0).map(s => Number(s.weight));
   const last = used.length ? Math.max(...used) : null;
@@ -724,14 +735,22 @@ function renderNextUpCard(s) {
       <p class="muted">${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'} · ${last ? 'last done ' + relativeDay(last) : 'first time'}</p>
       <ul class="lift-list">
         ${s.exercises.map(ex => {
-          const p = progressionFor(ex.id, ex.name);
+          const p = progressionFor(ex);
           let target = '<span class="muted">new</span>';
-          if (p && p.last != null) {
+          if (p && p.planned) {
+            target = `<strong>${p.next}</strong>`;
+          } else if (p && p.last != null) {
             target = p.up
               ? `<span class="muted">${p.last} →</span> <strong class="up">${p.next}</strong>`
               : `<strong>${p.last}</strong>`;
           } else if (p) {
             target = '<span class="muted">—</span>';
+          }
+          if (isNum(ex.goalWeight) && Number(ex.goalWeight) > 0) {
+            const goal = Number(ex.goalWeight);
+            target += p && p.next != null && p.next >= goal
+              ? ` <span class="up goal">${icon('check')}${goal}</span>`
+              : ` <span class="muted goal">/${goal}</span>`;
           }
           return `
           <li>
@@ -1060,6 +1079,22 @@ function renderRoutineMenu() {
   `;
 }
 
+const PROGRESSION_FIELDS = ['startWeight', 'step', 'goalWeight'];
+
+function hasProgression(ex) {
+  return PROGRESSION_FIELDS.some(k => isNum(ex[k]));
+}
+
+function progressionInput(ex, ids, key, label, placeholder) {
+  const v = isNum(ex[key]) ? ex[key] : '';
+  return `
+        <div class="grow">
+          <label class="field-label" for="sheet-ex-${key}">${label} (${unitLabel()})</label>
+          <input type="number" id="sheet-ex-${key}" min="0" step="0.5" inputmode="decimal" placeholder="${placeholder}"
+            data-field="progression" data-key="${key}" ${ids} value="${escapeHtml(v)}">
+        </div>`;
+}
+
 function renderExerciseSheet() {
   const s = findSession(sheet.sessionId);
   const ex = s && s.exercises.find(x => x.id === sheet.exerciseId);
@@ -1081,6 +1116,15 @@ function renderExerciseSheet() {
     </div>
     <label class="field-label mt-3" for="sheet-ex-notes">Notes</label>
     <input type="text" id="sheet-ex-notes" placeholder="Optional" data-field="exercise-notes" ${ids} value="${escapeHtml(ex.notes || '')}">
+    <details class="progression mt-3"${hasProgression(ex) ? ' open' : ''}>
+      <summary class="disclosure"><span class="grow">Progression <span class="muted">(optional)</span></span>${icon('chevDown')}</summary>
+      <div class="row mt-2">
+        ${progressionInput(ex, ids, 'startWeight', 'Start', '')}
+        ${progressionInput(ex, ids, 'step', 'Step', String(weightIncrement()))}
+        ${progressionInput(ex, ids, 'goalWeight', 'Goal', '')}
+      </div>
+      <p class="muted mt-2">Start is used until you log this exercise. Step 0 holds the weight.</p>
+    </details>
     <div class="row between mt-4">
       <button class="btn ghost danger-text" data-action="delete-exercise" ${ids}>${icon('trash')} Delete</button>
       <button class="btn primary" data-action="close-sheet">Done</button>
@@ -1222,7 +1266,7 @@ function handleStartSession(sessionId) {
     sessionName: s.name,
     startedAt: new Date().toISOString(),
     exercises: s.exercises.map(ex => {
-      const prog = progressionFor(ex.id, ex.name);
+      const prog = progressionFor(ex);
       const numSets = Number(ex.targetSets) || 1;
       const sets = [];
       for (let i = 0; i < numSets; i++) {
@@ -1310,6 +1354,26 @@ function importDataFromFile(file) {
   reader.readAsText(file);
 }
 
+// Shared JSON uses short keys: start, step, goal. All optional.
+const SHARED_PROGRESSION_KEYS = { start: 'startWeight', step: 'step', goal: 'goalWeight' };
+
+function progressionFromShared(e) {
+  const out = {};
+  for (const [shared, key] of Object.entries(SHARED_PROGRESSION_KEYS)) {
+    const v = e[shared] != null ? e[shared] : e[key];
+    if (isNum(v) && Number(v) >= 0) out[key] = Number(v);
+  }
+  return out;
+}
+
+function progressionForSharing(e) {
+  const out = {};
+  for (const [shared, key] of Object.entries(SHARED_PROGRESSION_KEYS)) {
+    if (isNum(e[key])) out[shared] = Number(e[key]);
+  }
+  return out;
+}
+
 function sessionsFromRoutineData(routineData) {
   return routineData.sessions.map(s => ({
     id: uid(),
@@ -1319,7 +1383,8 @@ function sessionsFromRoutineData(routineData) {
       name: String(e.name || ''),
       targetSets: Number(e.sets != null ? e.sets : e.targetSets) || 3,
       targetReps: String(e.reps != null ? e.reps : (e.targetReps != null ? e.targetReps : '10')),
-      notes: e.notes ? String(e.notes) : ''
+      notes: e.notes ? String(e.notes) : '',
+      ...progressionFromShared(e)
     })) : []
   }));
 }
@@ -1353,7 +1418,8 @@ function routineForSharing() {
           name: e.name,
           sets: e.targetSets,
           reps: /^\d+$/.test(e.targetReps) ? Number(e.targetReps) : e.targetReps,
-          ...(e.notes ? { notes: e.notes } : {})
+          ...(e.notes ? { notes: e.notes } : {}),
+          ...progressionForSharing(e)
         }))
       }))
   };
@@ -1714,6 +1780,16 @@ document.addEventListener('input', (e) => {
       const s = findSession(sessionId);
       const ex = s.exercises.find(x => x.id === exerciseId);
       ex.targetReps = e.target.value;
+      saveState();
+      break;
+    }
+    case 'progression': {
+      const s = findSession(sessionId);
+      const ex = s.exercises.find(x => x.id === exerciseId);
+      const key = e.target.dataset.key;
+      if (!PROGRESSION_FIELDS.includes(key)) break;
+      if (isNum(e.target.value)) ex[key] = Number(e.target.value);
+      else delete ex[key];
       saveState();
       break;
     }
