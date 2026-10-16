@@ -519,6 +519,7 @@ const ICONS = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   reorder: '<path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'
 };
@@ -910,6 +911,7 @@ function renderQuickStartPanel() {
     <div class="card">
       <h3>Quick start</h3>
       <p class="muted">Pick a template or paste a routine someone shared with you.</p>
+      ${hasAiKey() ? `<button class="btn block mt-3" data-action="open-ai-create">${icon('sparkle')} Build with AI</button>` : ''}
       <div class="tabs-toggle mt-3">
         <button class="${mode === 'templates' ? 'active' : ''}" data-action="quickstart-tab" data-mode="templates">Templates</button>
         <button class="${mode === 'json' ? 'active' : ''}" data-action="quickstart-tab" data-mode="json">Paste JSON</button>
@@ -1064,6 +1066,7 @@ function renderSheet() {
     case 'templates': body = `<h2>Use a template</h2><p class="muted">Adds that program's sessions. Nothing existing is deleted.</p><div class="mt-3">${renderTemplateRows()}</div>`; break;
     case 'import': body = `<h2>Import a routine</h2>${renderImportJsonForm()}`; break;
     case 'exercise': body = renderExerciseSheet(); break;
+    case 'ai': body = renderAiSheet(); break;
   }
   const anim = sheetAnimate ? ' sheet-enter' : '';
   sheetAnimate = false;
@@ -1097,6 +1100,11 @@ function renderRoutineMenu() {
     <p class="sheet-section">Add sessions</p>
     ${sheetItem('open-templates', 'grid', 'Use a template', ROUTINE_TEMPLATES.map(t => t.label).join(', '))}
     ${sheetItem('open-import', 'clipboard', 'Import a routine', 'Paste JSON someone sent you, or open a saved file.')}
+    ${hasAiKey() ? `
+      <p class="sheet-section">AI</p>
+      ${hasExercises ? sheetItem('open-ai-adjust', 'sparkle', 'Adjust with AI', 'Describe a change. Kept exercises keep their history.') : ''}
+      ${sheetItem('open-ai-create', 'sparkle', 'New routine with AI', 'Replaces this routine. Workout history is kept.')}
+    ` : ''}
   `;
 }
 
@@ -1244,6 +1252,7 @@ function renderSettingsTab() {
     <div class="top-bar"><h1>Settings</h1></div>
     ${renderInstallSettings()}
     ${renderShareSettings()}
+    ${renderAiSettings()}
     <div class="card">
       <label class="field-label">Weight unit label</label>
       <input type="text" data-field="unit" value="${escapeHtml(state.unit)}" maxlength="6">
@@ -1481,6 +1490,355 @@ function importRoutineFromJsonText(text) {
   return applyRoutineData(routineData);
 }
 
+// ---------- AI routine builder (optional) ----------
+// Uses the user's own Gemini key. The browser calls Gemini directly. Without a key none of this shows.
+// The key has its own localStorage entry so backups and "Erase all data" never touch it.
+const AI_KEY_STORE = 'ironlog.geminiKey';
+const AI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
+// Tried in order. Falls back on 429, 5xx, network errors, timeouts and unparseable output.
+const AI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+const AI_TIMEOUT_MS = 60000;
+const AI_MAX_SESSIONS = 7;
+const AI_MAX_EXERCISES = 12;
+
+const AI_SYSTEM_PROMPT = `You are a strength coach writing gym routines for the Iron Log app. Answer with JSON matching the schema.
+- reply: one or two short sentences to the user. Say what you built or changed. If the goal is vague, ask one question here and still return your best routine.
+- sessions: one per training day, in the order they should be trained. 1 to ${AI_MAX_SESSIONS} sessions, up to 10 exercises each.
+- sets: 1 to 10. reps: text, such as "10", "8-12" or "30s".
+- notes: optional. One short cue at most. Leave empty otherwise.
+- Use common gym exercise names. When an exercise from the user's known list fits, use that exact name.
+- Respect any schedule, equipment, time limit or injury the user states.
+- When you are given an existing routine: copy the id of every session and exercise you keep, unchanged. Leave id empty for anything new. Change only what the user asks for.`;
+
+const AI_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    reply: { type: 'STRING' },
+    name: { type: 'STRING' },
+    sessions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          id: { type: 'STRING' },
+          name: { type: 'STRING' },
+          exercises: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                id: { type: 'STRING' },
+                name: { type: 'STRING' },
+                sets: { type: 'INTEGER' },
+                reps: { type: 'STRING' },
+                notes: { type: 'STRING' }
+              },
+              required: ['name', 'sets', 'reps']
+            }
+          }
+        },
+        required: ['name', 'exercises']
+      }
+    }
+  },
+  required: ['reply', 'name', 'sessions']
+};
+
+// { mode: 'create' | 'adjust', turns: [{ role, text, display }], draft, input, busy, error }. Not saved.
+let aiChat = null;
+
+function loadAiKey() {
+  try { return localStorage.getItem(AI_KEY_STORE) || ''; } catch { return ''; }
+}
+
+function hasAiKey() {
+  return !!loadAiKey();
+}
+
+function saveAiKey(key) {
+  try {
+    if (key) localStorage.setItem(AI_KEY_STORE, key);
+    else localStorage.removeItem(AI_KEY_STORE);
+  } catch { /* storage blocked */ }
+}
+
+function openAiChat(mode) {
+  if (!aiChat || aiChat.mode !== mode) {
+    aiChat = { mode, turns: [], draft: null, input: '', busy: false, error: '' };
+  }
+  openSheet({ kind: 'ai' });
+}
+
+// The current routine with ids, so the model can say which exercises it kept.
+function routineForAi() {
+  return {
+    name: state.routine.name,
+    sessions: state.routine.sessions.map(s => ({
+      id: s.id,
+      name: s.name,
+      exercises: s.exercises.map(ex => ({
+        id: ex.id, name: ex.name, sets: Number(ex.targetSets) || 3, reps: String(ex.targetReps || ''), notes: ex.notes || ''
+      }))
+    }))
+  };
+}
+
+function aiFirstPrompt(mode, text) {
+  const known = allKnownExerciseNames().slice(0, 80);
+  const knownLine = known.length ? `\n\nExercises I already log (reuse these exact names when they fit): ${known.join(', ')}` : '';
+  if (mode === 'adjust') {
+    return `My current routine:\n${JSON.stringify(routineForAi())}\n\nChange it: ${text}${knownLine}`;
+  }
+  return `Build me a routine. My goal: ${text}${knownLine}`;
+}
+
+// Cleans the model's JSON into the draft shape. Throws when it is not a usable routine.
+function parseAiRoutine(text) {
+  const raw = JSON.parse(text);
+  if (!raw || !Array.isArray(raw.sessions)) throw new Error('No sessions in the answer');
+  const str = (v) => (v == null ? '' : String(v).trim());
+  const sessions = raw.sessions.slice(0, AI_MAX_SESSIONS).map(s => ({
+    id: str(s && s.id),
+    name: str(s && s.name) || 'Session',
+    exercises: (Array.isArray(s && s.exercises) ? s.exercises : [])
+      .filter(e => e && str(e.name))
+      .slice(0, AI_MAX_EXERCISES)
+      .map(e => ({
+        id: str(e.id),
+        name: str(e.name),
+        sets: Math.min(10, Math.max(1, Math.round(Number(e.sets)) || 3)),
+        reps: str(e.reps) || '10',
+        notes: str(e.notes)
+      }))
+  })).filter(s => s.exercises.length);
+  if (!sessions.length) throw new Error('No exercises in the answer');
+  return { reply: str(raw.reply), name: str(raw.name), sessions };
+}
+
+function geminiText(json) {
+  const cand = json && json.candidates && json.candidates[0];
+  if (!cand) {
+    const reason = json && json.promptFeedback && json.promptFeedback.blockReason;
+    throw new Error(reason ? `Blocked: ${reason}` : 'No answer returned');
+  }
+  const parts = (cand.content && cand.content.parts) || [];
+  const text = parts.filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('');
+  if (!text) throw new Error(`Empty answer (${cand.finishReason || 'unknown'})`);
+  return text;
+}
+
+async function callGemini(contents) {
+  const key = loadAiKey();
+  let lastErr = new Error('No model available');
+  for (const model of AI_MODELS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${AI_ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
+          contents,
+          generationConfig: { responseMimeType: 'application/json', responseSchema: AI_SCHEMA, temperature: 0.4 }
+        }),
+        signal: ctrl.signal
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const err = new Error((json && json.error && json.error.message) || `HTTP ${res.status}`);
+        // Other 4xx (bad key, bad request) fail the same way on every model.
+        if (res.status !== 429 && res.status < 500) err.stop = true;
+        throw err;
+      }
+      const text = geminiText(json);
+      return { text, routine: parseAiRoutine(text) };
+    } catch (err) {
+      if (err.stop) throw err;
+      lastErr = err.name === 'AbortError' ? new Error('Timed out') : err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
+
+function aiErrorMessage(err) {
+  const msg = (err && err.message) || 'Unknown error';
+  if (err && err.stop && /api key|permission|unauthori[sz]ed/i.test(msg)) {
+    return 'Gemini rejected your key. Check it in Settings.';
+  }
+  if (err && err.stop) return `Gemini refused the request: ${msg}`;
+  return `Couldn't get a routine from Gemini (${msg}). Try again.`;
+}
+
+async function sendAiMessage() {
+  const c = aiChat;
+  const text = c ? c.input.trim() : '';
+  if (!text || c.busy) return;
+  const turns = [...c.turns, { role: 'user', text: c.turns.length ? text : aiFirstPrompt(c.mode, text), display: text }];
+  c.busy = true;
+  c.error = '';
+  render();
+  try {
+    const { text: out, routine } = await callGemini(turns.map(t => ({ role: t.role, parts: [{ text: t.text }] })));
+    c.turns = [...turns, { role: 'model', text: out, display: routine.reply || 'Here is a draft.' }];
+    c.draft = routine;
+    c.input = '';
+  } catch (err) {
+    c.error = aiErrorMessage(err);
+  }
+  c.busy = false;
+  if (aiChat === c && sheet && sheet.kind === 'ai') render();
+}
+
+// Keeps the ids of sessions and exercises the model kept, so their history and PRs stay linked.
+function sessionsFromAiDraft(draft, keepIds) {
+  const oldSessions = new Map(state.routine.sessions.map(s => [s.id, s]));
+  const oldExercises = new Map(state.routine.sessions.flatMap(s => s.exercises.map(ex => [ex.id, ex])));
+  const used = new Set();
+  const keep = (id, known) => {
+    if (keepIds && id && known.has(id) && !used.has(id)) { used.add(id); return id; }
+    return uid();
+  };
+  return draft.sessions.map(s => ({
+    id: keep(s.id, oldSessions),
+    name: s.name,
+    exercises: s.exercises.map(e => {
+      const id = keep(e.id, oldExercises);
+      // A kept exercise also keeps fields the model never sees, such as start, step and goal weights.
+      return { ...(oldExercises.get(id) || {}), id, name: e.name, targetSets: e.sets, targetReps: e.reps, notes: e.notes };
+    })
+  }));
+}
+
+function applyAiDraft() {
+  const c = aiChat;
+  if (!c || !c.draft) return;
+  if (state.activeWorkoutDraft) {
+    alert('Finish or cancel your current workout first.');
+    return;
+  }
+  const adjust = c.mode === 'adjust';
+  if (!adjust && state.routine.sessions.length &&
+      !confirm('Replace your current routine with this one? Your workout history is kept.')) return;
+  state.routine.sessions = sessionsFromAiDraft(c.draft, adjust);
+  if (!adjust && c.draft.name) state.routine.name = c.draft.name;
+  state.ui.expandedSessionIds = [];
+  state.ui.activeTab = 'routine';
+  saveState();
+  aiChat = null;
+  closeSheet();
+  render();
+  showToast(adjust ? 'Routine updated.' : 'Routine created.');
+}
+
+// Tags each drafted exercise against the current routine. Only used when adjusting.
+function aiExerciseTag(e, oldById) {
+  const old = e.id && oldById.get(e.id);
+  if (!old) return 'New';
+  const same = old.name === e.name && Number(old.targetSets) === e.sets &&
+    String(old.targetReps) === e.reps && (old.notes || '') === e.notes;
+  return same ? '' : 'Changed';
+}
+
+function renderAiPreview(c) {
+  const d = c.draft;
+  const adjust = c.mode === 'adjust';
+  const oldById = new Map(state.routine.sessions.flatMap(s => s.exercises.map(ex => [ex.id, ex])));
+  const keptIds = new Set(d.sessions.flatMap(s => s.exercises.map(e => e.id)));
+  const removed = adjust ? [...oldById.values()].filter(ex => !keptIds.has(ex.id)) : [];
+  return `
+    <div class="ai-preview">
+      <h3>${escapeHtml(adjust ? state.routine.name : (d.name || 'New routine'))}</h3>
+      ${d.sessions.map(s => `
+        <p class="ai-session">${escapeHtml(s.name)}</p>
+        ${s.exercises.map(e => {
+          const tag = adjust ? aiExerciseTag(e, oldById) : '';
+          return `
+          <div class="ai-ex">
+            <span>${escapeHtml(e.name)}${tag ? ` <span class="ai-tag${tag === 'New' ? ' new' : ''}">${tag}</span>` : ''}</span>
+            <span class="ex-line-target">${escapeHtml(e.sets + ' × ' + e.reps)}</span>
+          </div>
+          ${e.notes ? `<p class="muted ai-note">${escapeHtml(e.notes)}</p>` : ''}`;
+        }).join('')}
+      `).join('')}
+      ${removed.length ? `<p class="muted mt-2">Removed: ${removed.map(ex => escapeHtml(ex.name)).join(', ')}</p>` : ''}
+    </div>
+  `;
+}
+
+function renderAiSheet() {
+  const c = aiChat;
+  if (!c) return '';
+  const adjust = c.mode === 'adjust';
+  const first = !c.turns.length;
+  const placeholder = !first
+    ? 'Refine it, e.g. "shorter sessions" or "swap squats, my knee hurts"'
+    : adjust
+      ? 'e.g. "add more back work" or "make it 3 days"'
+      : 'e.g. 3 days a week, dumbbells at home, bigger arms, bad left knee';
+  return `
+    <h2>${adjust ? 'Adjust with AI' : 'Build with AI'}</h2>
+    <p class="muted">${adjust
+      ? 'Say what to change. Exercises you keep keep their history.'
+      : 'Describe your goal, schedule, equipment and any injuries.'}</p>
+    ${c.turns.length ? `<div class="ai-log">${c.turns.map(t => `
+      <p class="ai-msg ${t.role}">${escapeHtml(t.display)}</p>`).join('')}</div>` : ''}
+    ${c.draft ? renderAiPreview(c) : ''}
+    ${c.error ? `<p class="ai-error mt-2">${escapeHtml(c.error)}</p>` : ''}
+    <textarea id="ai-input" class="ai-input mt-3" rows="3" data-field="ai-input"
+      placeholder="${escapeHtml(placeholder)}" ${c.busy ? 'disabled' : ''}>${escapeHtml(c.input)}</textarea>
+    <div class="row mt-3">
+      <button class="btn ${c.draft ? '' : 'primary '}grow" data-action="ai-send" ${c.busy ? 'disabled' : ''}>
+        ${c.busy ? 'Thinking…' : first ? 'Suggest a routine' : 'Refine'}</button>
+      ${c.draft ? `<button class="btn primary grow" data-action="ai-apply" ${c.busy ? 'disabled' : ''}>
+        ${adjust ? 'Apply changes' : 'Use this routine'}</button>` : ''}
+    </div>
+  `;
+}
+
+function renderAiSettings() {
+  const key = loadAiKey();
+  return `
+    <div class="card">
+      <h3>AI routine builder</h3>
+      <p class="muted">Optional. Describe a goal and Gemini drafts or adjusts your routine. It needs your own free Gemini key. The key stays in this browser and is not included in backups.</p>
+      ${key ? `
+        <p class="mt-2">Key saved <span class="muted">ending ${escapeHtml(key.slice(-4))}</span></p>
+        <div class="row wrap mt-2">
+          <button class="btn" data-action="ai-key-test">Test key</button>
+          <button class="btn ghost danger-text" data-action="ai-key-remove">Remove key</button>
+        </div>
+      ` : `
+        <label class="field-label mt-2" for="ai-key-input">Gemini API key</label>
+        <input type="password" id="ai-key-input" autocomplete="off" spellcheck="false" placeholder="Paste your key">
+        <button class="btn primary block mt-2" data-action="ai-key-save">Save key</button>
+        <details class="guide mt-3">
+          <summary>How to get a free key</summary>
+          <ol>
+            <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> and sign in with Google.</li>
+            <li>Tap "Create API key".</li>
+            <li>Copy the key and paste it above.</li>
+          </ol>
+        </details>
+      `}
+      <p class="muted mt-2">On the free tier Google may use what you type to improve its products.</p>
+    </div>
+  `;
+}
+
+async function testAiKey() {
+  try {
+    const res = await fetch(`${AI_ENDPOINT}/${encodeURIComponent(AI_MODELS[0])}`, { headers: { 'x-goog-api-key': loadAiKey() } });
+    if (res.ok) { showToast('Key works.'); return; }
+    const json = await res.json().catch(() => null);
+    alert(`Gemini rejected the key: ${(json && json.error && json.error.message) || 'HTTP ' + res.status}`);
+  } catch {
+    alert('Could not reach Gemini. Check your connection.');
+  }
+}
+
 function clearAllData() {
   if (!confirm('Erase ALL routines and history from this browser? This cannot be undone.')) return;
   if (!confirm('Really sure? This is permanent.')) return;
@@ -1652,6 +2010,35 @@ document.addEventListener('click', (e) => {
       break;
     case 'open-import':
       openSheet({ kind: 'import' });
+      break;
+    case 'open-ai-create':
+      openAiChat('create');
+      break;
+    case 'open-ai-adjust':
+      openAiChat('adjust');
+      break;
+    case 'ai-send':
+      sendAiMessage();
+      break;
+    case 'ai-apply':
+      applyAiDraft();
+      break;
+    case 'ai-key-save': {
+      const key = document.getElementById('ai-key-input').value.trim();
+      if (!key) break;
+      saveAiKey(key);
+      render();
+      testAiKey();
+      break;
+    }
+    case 'ai-key-test':
+      testAiKey();
+      break;
+    case 'ai-key-remove':
+      if (!confirm('Remove your Gemini key from this browser?')) break;
+      saveAiKey('');
+      aiChat = null;
+      render();
       break;
     case 'reorder-start':
       routineReorder = true;
@@ -1837,6 +2224,9 @@ document.addEventListener('input', (e) => {
     case 'rest-seconds':
       state.restSeconds = e.target.value === '' ? '' : Number(e.target.value);
       saveState();
+      break;
+    case 'ai-input':
+      if (aiChat) aiChat.input = e.target.value;
       break;
   }
 });
