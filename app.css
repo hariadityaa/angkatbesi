@@ -304,7 +304,7 @@ label.field-label {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: var(--s-4);
-  margin-bottom: var(--s-3);
+  margin-top: var(--s-3);
 }
 .rest-remaining-text { font-size: var(--text-xl); font-weight: 600; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .rest-progress-track { height: 4px; background: var(--border); border-radius: var(--radius-full); overflow: hidden; margin-top: var(--s-2); }

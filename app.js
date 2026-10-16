@@ -844,8 +844,8 @@ function renderActiveWorkout(draft) {
         <span class="mono">${done}/${total} sets</span>
       </div>
       <div class="rest-progress-track"><div class="rest-progress-fill" style="width:${pct}%"></div></div>
+      ${renderRestBanner()}
     </div>
-    ${renderRestBanner()}
     <div class="card">
       ${draft.exercises.map(ex => `
         <div class="exercise-row">
