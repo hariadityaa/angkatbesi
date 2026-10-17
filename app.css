@@ -547,3 +547,8 @@ body.sheet-open { overflow: hidden; }
 .tpl-session { margin-top: var(--s-3); }
 .tpl-ex { display: flex; justify-content: space-between; gap: var(--s-3); padding: var(--s-1) 0; }
 .tpl-sr { white-space: nowrap; flex-shrink: 0; }
+
+/* Reorder / share row under the session list */
+.routine-tools { justify-content: center; margin-top: var(--s-4); }
+.routine-tools .btn { display: inline-flex; align-items: center; gap: var(--s-2); }
+.routine-tools .icon { width: 16px; height: 16px; }

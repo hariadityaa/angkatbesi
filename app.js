@@ -973,13 +973,26 @@ function renderRoutineTab() {
         value="${escapeHtml(r.name)}" placeholder="Routine name" aria-label="Routine name" enterkeyhint="done">
       ${routineReorder
         ? '<button class="btn small primary" data-action="reorder-done">Done</button>'
-        : '<button class="icon-btn head-btn" data-action="open-routine-menu" aria-label="Add or manage sessions">' + icon('plus') + '</button>'}
+        : '<button class="icon-btn head-btn" data-action="open-routine-menu" aria-label="Add sessions">' + icon('plus') + '</button>'}
       <button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button>
     </div>
     ${routineReorder ? '<p class="muted reorder-hint">Use the arrows to reorder sessions and exercises.</p>' : ''}
     ${empty ? renderQuickStartPanel() : ''}
     ${r.sessions.map((s, sIdx) => renderSessionCard(s, sIdx, r.sessions.length)).join('')}
     ${routineReorder ? '' : '<button class="btn dashed block" data-action="add-session">+ Add session</button>'}
+    ${routineReorder || empty ? '' : renderRoutineTools()}
+  `;
+}
+
+// Reorder and share sit below the sessions so the header + only adds
+function renderRoutineTools() {
+  const hasExercises = state.routine.sessions.some(s => s.exercises.length);
+  const tool = (action, iconName, label) => `<button class="btn small" data-action="${action}">${icon(iconName)}${label}</button>`;
+  return `
+    <div class="row wrap routine-tools">
+      ${tool('reorder-start', 'reorder', 'Reorder')}
+      ${hasExercises ? tool('share-routine', 'share', 'Send') + tool('download-routine', 'download', 'Save file') : ''}
+    </div>
   `;
 }
 
@@ -1191,12 +1204,6 @@ function sheetItem(action, iconName, label, sub) {
 function renderRoutineMenu() {
   const hasExercises = state.routine.sessions.some(s => s.exercises.length);
   return `
-    ${state.routine.sessions.length ? sheetItem('reorder-start', 'reorder', 'Reorder', 'Move sessions and exercises') : ''}
-    ${hasExercises ? `
-      <p class="sheet-section">Share</p>
-      ${sheetItem('share-routine', 'share', 'Send to someone', 'Opens your share sheet. Sets and reps only, no weights.')}
-      ${sheetItem('download-routine', 'download', 'Save as file', 'Downloads a .json copy. Import it later or on another phone.')}
-    ` : ''}
     <p class="sheet-section">Add sessions</p>
     ${sheetItem('open-templates', 'grid', 'Use a template', ROUTINE_TEMPLATES.map(t => t.label).join(', '))}
     ${sheetItem('open-import', 'clipboard', 'Import a routine', 'Paste JSON someone sent you, or open a saved file.')}
