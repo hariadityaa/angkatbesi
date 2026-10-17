@@ -591,6 +591,7 @@ const ICONS = {
   up: '<path d="M12 19V5m-6 6 6-6 6 6"/>',
   down: '<path d="M12 5v14m-6-6 6 6 6-6"/>',
   chevDown: '<path d="m6 9 6 6 6-6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>',
@@ -970,10 +971,10 @@ function renderRoutineTab() {
     <div class="top-bar routine-head">
       <input type="text" id="routine-name-input" class="title-input" data-field="routine-name"
         value="${escapeHtml(r.name)}" placeholder="Routine name" aria-label="Routine name" enterkeyhint="done">
-      <button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button>
       ${routineReorder
         ? '<button class="btn small primary" data-action="reorder-done">Done</button>'
-        : '<button class="icon-btn" data-action="open-routine-menu" aria-label="Routine options">' + icon('more') + '</button>'}
+        : '<button class="icon-btn head-btn" data-action="open-routine-menu" aria-label="Add or manage sessions">' + icon('plus') + '</button>'}
+      <button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button>
     </div>
     ${routineReorder ? '<p class="muted reorder-hint">Use the arrows to reorder sessions and exercises.</p>' : ''}
     ${empty ? renderQuickStartPanel() : ''}
