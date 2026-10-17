@@ -122,6 +122,85 @@ const ROUTINE_TEMPLATES = [
         }
       ]
     }
+  },
+  {
+    key: 'phul',
+    label: 'PHUL',
+    description: 'Power Hypertrophy Upper Lower — 2 heavy and 2 volume days, 4x/week.',
+    data: {
+      name: 'PHUL',
+      sessions: [
+        {
+          name: 'Upper Power',
+          exercises: [
+            { name: 'Barbell Bench Press', sets: 3, reps: '3-5', notes: 'Heavy. Leave 1 rep in reserve.' },
+            { name: 'Incline Dumbbell Press', sets: 3, reps: '6-10' },
+            { name: 'Bent-Over Row', sets: 3, reps: '3-5', notes: 'Heavy. Leave 1 rep in reserve.' },
+            { name: 'Lat Pulldown', sets: 3, reps: '6-10' },
+            { name: 'Overhead Press', sets: 2, reps: '5-8' },
+            { name: 'Barbell Curl', sets: 2, reps: '6-10' },
+            { name: 'Skullcrusher', sets: 2, reps: '6-10' }
+          ]
+        },
+        {
+          name: 'Lower Power',
+          exercises: [
+            { name: 'Squat', sets: 3, reps: '3-5', notes: 'Heavy. Leave 1 rep in reserve.' },
+            { name: 'Deadlift', sets: 3, reps: '3-5', notes: 'Heavy. Leave 1 rep in reserve.' },
+            { name: 'Leg Press', sets: 3, reps: '10-15' },
+            { name: 'Leg Curl', sets: 3, reps: '6-10' },
+            { name: 'Calf Raise', sets: 4, reps: '6-10' }
+          ]
+        },
+        {
+          name: 'Upper Hypertrophy',
+          exercises: [
+            { name: 'Incline Barbell Bench Press', sets: 3, reps: '8-12' },
+            { name: 'Dumbbell Fly', sets: 3, reps: '8-12' },
+            { name: 'Seated Cable Row', sets: 3, reps: '8-12' },
+            { name: 'One-Arm Dumbbell Row', sets: 3, reps: '8-12' },
+            { name: 'Dumbbell Lateral Raise', sets: 3, reps: '8-12' },
+            { name: 'Incline Dumbbell Curl', sets: 3, reps: '8-12' },
+            { name: 'Cable Triceps Extension', sets: 3, reps: '8-12' }
+          ]
+        },
+        {
+          name: 'Lower Hypertrophy',
+          exercises: [
+            { name: 'Front Squat', sets: 3, reps: '8-12' },
+            { name: 'Barbell Lunge', sets: 3, reps: '8-12' },
+            { name: 'Leg Extension', sets: 3, reps: '10-15' },
+            { name: 'Leg Curl', sets: 3, reps: '10-15' },
+            { name: 'Seated Calf Raise', sets: 3, reps: '8-12' },
+            { name: 'Calf Press', sets: 3, reps: '8-12' }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    key: 'bwf-rr',
+    label: 'Bodyweight Recommended Routine',
+    description: 'r/bodyweightfitness full-body calisthenics — pull-up bar and dip bars, 3x/week.',
+    data: {
+      name: 'Bodyweight Recommended Routine',
+      sessions: [
+        {
+          name: 'Strength (pairs, then core)',
+          exercises: [
+            { name: 'Pull-up progression', sets: 3, reps: '5-8', notes: 'Pair with squat. Rest 90s. Scap pulls, negatives, pull-ups. At 3x8, move to the next step.' },
+            { name: 'Squat progression', sets: 3, reps: '5-8', notes: 'Assisted squat, squat, split squat, Bulgarian split squat. At 3x8, move to the next step.' },
+            { name: 'Dip progression', sets: 3, reps: '5-8', notes: 'Pair with hinge. Rest 90s. Support hold, negatives, parallel-bar dips. At 3x8, move to the next step.' },
+            { name: 'Hinge progression', sets: 3, reps: '5-8', notes: 'Romanian deadlift, single-leg RDL, toward Nordic curls. At 3x8, move to the next step.' },
+            { name: 'Row progression', sets: 3, reps: '5-8', notes: 'Pair with push-up. Rest 90s. Vertical row, incline row, horizontal row. At 3x8, move to the next step.' },
+            { name: 'Push-up progression', sets: 3, reps: '5-8', notes: 'Wall, incline, full, diamond, archer. At 3x8, move to the next step.' },
+            { name: 'Plank', sets: 3, reps: '8-12', notes: 'Core triplet, 60s rest. Or hold 30s.' },
+            { name: 'Pallof Press', sets: 3, reps: '8-12', notes: 'Core triplet. Each side.' },
+            { name: 'Reverse Hyperextension', sets: 3, reps: '8-12', notes: 'Core triplet.' }
+          ]
+        }
+      ]
+    }
   }
 ];
 
@@ -934,7 +1013,7 @@ function renderTemplateRows() {
           <button class="disclosure" data-action="toggle-template-preview" data-template="${t.key}" aria-expanded="${open}">
             <span class="disclosure-text">
               <h3>${escapeHtml(t.label)}</h3>
-              <span class="muted">${t.data.sessions.length} sessions · ${exCount} exercises</span>
+              <span class="muted">${t.data.sessions.length} session${t.data.sessions.length === 1 ? '' : 's'} · ${exCount} exercises</span>
             </span>
             ${icon('chevDown')}
           </button>
@@ -2325,7 +2404,7 @@ document.addEventListener('click', (e) => {
     case 'use-template': {
       const tpl = ROUTINE_TEMPLATES.find(t => t.key === target.dataset.template);
       if (!tpl) break;
-      const msg = `Add "${tpl.label}" (${tpl.data.sessions.length} sessions) to your routine? Existing sessions are kept.`;
+      const msg = `Add "${tpl.label}" (${tpl.data.sessions.length} session${tpl.data.sessions.length === 1 ? "" : "s"}) to your routine? Existing sessions are kept.`;
       if (applyRoutineData(tpl.data, msg)) {
         if (sheet) closeSheet();
         render();
