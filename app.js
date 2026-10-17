@@ -254,7 +254,8 @@ let state = loadState();
 if (state.activeWorkoutDraft) state.ui.activeTab = 'train';
 
 // Rest timer lives outside persisted state — it doesn't need to survive a reload.
-let restState = { running: false, remaining: 0, duration: Number(state.restSeconds) || 90 };
+// Counts down to a fixed end time so it stays correct when the phone throttles a hidden tab.
+let restState = { running: false, remaining: 0, duration: Number(state.restSeconds) || 90, endsAt: 0 };
 let restIntervalHandle = null;
 
 function uid() {
@@ -515,45 +516,80 @@ function clearRestInterval() {
   }
 }
 
+// A static notification shows when rest ends while the app is minimised.
+// Web notifications can't tick, so it shows the end time instead.
+function showRestNotification() {
+  if (!('Notification' in window) || Notification.permission !== 'granted' || !navigator.serviceWorker) return;
+  const ends = new Date(restState.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  navigator.serviceWorker.ready.then((reg) => reg.showNotification('Resting', {
+    body: 'Next set at ' + ends,
+    tag: 'rest',
+    silent: true,
+    icon: 'icons/icon-192.png'
+  })).catch(() => {});
+}
+
+function closeRestNotification() {
+  if (!navigator.serviceWorker) return;
+  navigator.serviceWorker.ready.then((reg) => reg.getNotifications({ tag: 'rest' }))
+    .then((list) => list.forEach((n) => n.close())).catch(() => {});
+}
+
+function tickRestTimer() {
+  if (!restState.running) return;
+  restState.remaining = Math.max(0, Math.ceil((restState.endsAt - Date.now()) / 1000));
+  if (restState.remaining <= 0) {
+    clearRestInterval();
+    restState.running = false;
+    closeRestNotification();
+    beep();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    updateRestBannerDom();
+    showToast('Rest done — next set!');
+    setTimeout(() => { if (!restState.running) render(); }, 400);
+    return;
+  }
+  updateRestBannerDom();
+}
+
 function startRestTimer() {
   clearRestInterval();
   const duration = Number(state.restSeconds) || 90;
-  restState = { running: true, remaining: duration, duration };
-  restIntervalHandle = setInterval(() => {
-    restState.remaining -= 1;
-    if (restState.remaining <= 0) {
-      clearRestInterval();
-      restState.running = false;
-      restState.remaining = 0;
-      beep();
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      updateRestBannerDom();
-      showToast('Rest done — next set!');
-      setTimeout(() => { if (!restState.running) render(); }, 400);
-      return;
-    }
-    updateRestBannerDom();
-  }, 1000);
+  restState = { running: true, remaining: duration, duration, endsAt: Date.now() + duration * 1000 };
+  restIntervalHandle = setInterval(tickRestTimer, 1000);
+  // Called from a tap, so the permission prompt is allowed here.
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().then(() => { if (restState.running) showRestNotification(); }).catch(() => {});
+  } else {
+    showRestNotification();
+  }
 }
 
 function adjustRestTimer(deltaSeconds) {
   if (!restState.running) return;
-  restState.remaining = Math.max(0, restState.remaining + deltaSeconds);
+  restState.endsAt = Math.max(Date.now(), restState.endsAt + deltaSeconds * 1000);
+  restState.remaining = Math.max(0, Math.ceil((restState.endsAt - Date.now()) / 1000));
   restState.duration = Math.max(restState.duration, restState.remaining);
   updateRestBannerDom();
+  showRestNotification();
 }
 
 function skipRestTimer() {
   clearRestInterval();
   restState.running = false;
   restState.remaining = 0;
+  closeRestNotification();
   render();
 }
 
 function stopRestTimerSilently() {
   clearRestInterval();
-  restState = { running: false, remaining: 0, duration: Number(state.restSeconds) || 90 };
+  if (restState.running) closeRestNotification();
+  restState = { running: false, remaining: 0, duration: Number(state.restSeconds) || 90, endsAt: 0 };
 }
+
+// Catch up straight away when the app comes back to the foreground.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tickRestTimer(); });
 
 function updateRestBannerDom() {
   const remEl = document.getElementById('rest-remaining');
