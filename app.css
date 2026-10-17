@@ -541,3 +541,8 @@ body.sheet-open { overflow: hidden; }
 .set-link { font-size: var(--text-sm); color: var(--text-2); }
 .gear-btn { color: var(--text); min-width: 44px; min-height: 44px; margin-right: calc(-1 * var(--s-2)); }
 .gear-btn .icon { width: 24px; height: 24px; stroke-width: 1.75; }
+
+/* Template preview: sessions and exercises shown before "Use" */
+.tpl-session { margin-top: var(--s-3); }
+.tpl-ex { display: flex; justify-content: space-between; gap: var(--s-3); padding: var(--s-1) 0; }
+.tpl-sr { white-space: nowrap; flex-shrink: 0; }
