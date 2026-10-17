@@ -221,8 +221,7 @@ function defaultState() {
       expandedSessionIds: [],
       expandedHistoryIds: [],
       historyViewMode: 'sessions',
-      historyExerciseFilter: '',
-      quickStartMode: 'templates'
+      historyExerciseFilter: ''
     }
   };
 }
@@ -592,9 +591,9 @@ const ICONS = {
   up: '<path d="M12 19V5m-6 6 6-6 6 6"/>',
   down: '<path d="M12 5v14m-6-6 6 6 6-6"/>',
   chevDown: '<path d="m6 9 6 6 6-6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
-  pencil: '<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
   share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   reorder: '<path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/>',
@@ -972,20 +971,35 @@ function renderRoutineTab() {
     <div class="top-bar routine-head">
       <input type="text" id="routine-name-input" class="title-input" data-field="routine-name"
         value="${escapeHtml(r.name)}" placeholder="Routine name" aria-label="Routine name" enterkeyhint="done">
-      <label class="icon-btn" for="routine-name-input" aria-label="Rename routine">${icon('pencil')}</label>
       ${routineReorder
         ? '<button class="btn small primary" data-action="reorder-done">Done</button>'
-        : '<button class="icon-btn" data-action="open-routine-menu" aria-label="Routine options">' + icon('more') + '</button>'}
+        : '<button class="icon-btn head-btn" data-action="open-routine-menu" aria-label="Add sessions">' + icon('plus') + '</button>'}
+      <button class="icon-btn gear-btn" data-action="open-settings" aria-label="Settings">${icon('gear')}</button>
     </div>
     ${routineReorder ? '<p class="muted reorder-hint">Use the arrows to reorder sessions and exercises.</p>' : ''}
     ${empty ? renderQuickStartPanel() : ''}
     ${r.sessions.map((s, sIdx) => renderSessionCard(s, sIdx, r.sessions.length)).join('')}
     ${routineReorder ? '' : '<button class="btn dashed block" data-action="add-session">+ Add session</button>'}
+    ${routineReorder || empty ? '' : renderRoutineTools()}
   `;
 }
 
+// Reorder and share sit below the sessions so the header + only adds
+function renderRoutineTools() {
+  const hasExercises = state.routine.sessions.some(s => s.exercises.length);
+  const tool = (action, iconName, label) => `<button class="btn small" data-action="${action}">${icon(iconName)}${label}</button>`;
+  return `
+    <div class="row wrap routine-tools">
+      ${tool('reorder-start', 'reorder', 'Reorder')}
+      ${hasExercises ? tool('share-routine', 'share', 'Send') + tool('download-routine', 'download', 'Save file') : ''}
+    </div>
+  `;
+}
+
+let quickStartMode = 'templates'; // not saved: an empty routine always opens on Templates
+
 function renderQuickStartPanel() {
-  const mode = state.ui.quickStartMode || 'templates';
+  const mode = quickStartMode;
   return `
     <div class="card">
       <h3>Quick start</h3>
@@ -1190,12 +1204,6 @@ function sheetItem(action, iconName, label, sub) {
 function renderRoutineMenu() {
   const hasExercises = state.routine.sessions.some(s => s.exercises.length);
   return `
-    ${state.routine.sessions.length ? sheetItem('reorder-start', 'reorder', 'Reorder', 'Move sessions and exercises') : ''}
-    ${hasExercises ? `
-      <p class="sheet-section">Share</p>
-      ${sheetItem('share-routine', 'share', 'Send to someone', 'Opens your share sheet. Sets and reps only, no weights.')}
-      ${sheetItem('download-routine', 'download', 'Save as file', 'Downloads a .json copy. Import it later or on another phone.')}
-    ` : ''}
     <p class="sheet-section">Add sessions</p>
     ${sheetItem('open-templates', 'grid', 'Use a template', ROUTINE_TEMPLATES.map(t => t.label).join(', '))}
     ${sheetItem('open-import', 'clipboard', 'Import a routine', 'Paste JSON someone sent you, or open a saved file.')}
@@ -2075,6 +2083,7 @@ document.addEventListener('click', (e) => {
     state.ui.activeTab = tabBtn.dataset.tab;
     finishSummary = null;
     routineReorder = false;
+    quickStartMode = 'templates';
     if (sheet) closeSheet();
     saveState();
     render();
@@ -2361,8 +2370,7 @@ document.addEventListener('click', (e) => {
       render();
       break;
     case 'quickstart-tab':
-      state.ui.quickStartMode = target.dataset.mode;
-      saveState();
+      quickStartMode = target.dataset.mode;
       render();
       break;
     case 'import-routine-json': {
