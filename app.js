@@ -921,19 +921,39 @@ function renderQuickStartPanel() {
   `;
 }
 
+let previewTemplateKey = null; // template row expanded to show its sessions
+
 function renderTemplateRows() {
   return `
-    ${ROUTINE_TEMPLATES.map(t => `
+    ${ROUTINE_TEMPLATES.map(t => {
+      const open = previewTemplateKey === t.key;
+      const exCount = t.data.sessions.reduce((n, s) => n + s.exercises.length, 0);
+      return `
       <div class="exercise-row">
         <div class="row between">
-          <div>
-            <h3>${escapeHtml(t.label)}</h3>
-            <p class="muted">${escapeHtml(t.description)}</p>
-          </div>
+          <button class="disclosure" data-action="toggle-template-preview" data-template="${t.key}" aria-expanded="${open}">
+            <span class="disclosure-text">
+              <h3>${escapeHtml(t.label)}</h3>
+              <span class="muted">${t.data.sessions.length} sessions · ${exCount} exercises</span>
+            </span>
+            ${icon('chevDown')}
+          </button>
           <button class="btn small" data-action="use-template" data-template="${t.key}">Use</button>
         </div>
+        <p class="muted mt-1">${escapeHtml(t.description)}</p>
+        ${open ? t.data.sessions.map(s => `
+          <div class="tpl-session">
+            <p class="sheet-section">${escapeHtml(s.name)}</p>
+            ${s.exercises.map(ex => `
+              <div class="tpl-ex">
+                <span>${escapeHtml(ex.name)}${ex.notes ? `<span class="muted block">${escapeHtml(ex.notes)}</span>` : ''}</span>
+                <span class="muted tpl-sr">${ex.sets} × ${escapeHtml(String(ex.reps))}</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('') : ''}
       </div>
-    `).join('')}
+    `; }).join('')}
   `;
 }
 
@@ -2256,6 +2276,10 @@ document.addEventListener('click', (e) => {
       break;
     case 'clear-all-data':
       clearAllData();
+      break;
+    case 'toggle-template-preview':
+      previewTemplateKey = previewTemplateKey === target.dataset.template ? null : target.dataset.template;
+      render();
       break;
     case 'quickstart-tab':
       state.ui.quickStartMode = target.dataset.mode;
