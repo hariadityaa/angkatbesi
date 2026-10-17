@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gym-companion-v23';
+const CACHE_NAME = 'gym-companion-v24';
 
 // The app shell — always fetched from the network first so updates show up
 // immediately when online. The cache is only the offline fallback.
@@ -61,5 +61,16 @@ self.addEventListener('fetch', (event) => {
       }
       return response;
     }))
+  );
+});
+
+// Tapping the rest notification brings the app back.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const client = list.find((c) => 'focus' in c);
+      return client ? client.focus() : self.clients.openWindow('./');
+    })
   );
 });
